@@ -71,12 +71,28 @@ app.use((req, res, next) => {
 app.use(express.static(path.join(__dirname, "public"), { redirect: false }));
 
 // ══════════════════════════════════════════════════════════════
+// CLEAN URL ROUTES
+// ══════════════════════════════════════════════════════════════
+
+// ---- FEATURE: Clean URL routes (no .html extension) ----
+const fs = require("fs");
+const publicDir = path.join(__dirname, "public");
+
+app.get("/tos", (req, res) => {
+  res.sendFile(path.join(publicDir, "tos.html"));
+});
+
+app.get("/privacy", (req, res) => {
+  res.sendFile(path.join(publicDir, "privacy.html"));
+});
+
+// ══════════════════════════════════════════════════════════════
 // SWAGGER UI DOCS
 // ══════════════════════════════════════════════════════════════
 
 // ---- FEATURE: Interactive Swagger UI documentation at /docs ----
 app.get("/docs", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "docs.html"));
+  res.sendFile(path.join(publicDir, "docs.html"));
 });
 
 // ══════════════════════════════════════════════════════════════
@@ -163,7 +179,11 @@ app.use((req, res) => {
       message: "Endpoint not found",
     });
   }
-  res.sendFile(path.join(__dirname, "public", "index.html"));
+  const notFoundPath = path.join(publicDir, "404.html");
+  if (fs.existsSync(notFoundPath)) {
+    return res.status(404).sendFile(notFoundPath);
+  }
+  res.sendFile(path.join(publicDir, "index.html"));
 });
 
 // ══════════════════════════════════════════════════════════════

@@ -1,5 +1,26 @@
 # Changelog
 
+## v1.3.0
+- Full landing page upgrade to match AniKotoAPI style
+- Added canvas particle effects with cyan-colored floating particles
+- Added scroll-reveal animations (IntersectionObserver)
+- Added animated stat counters that count up on scroll
+- Added infinite scrolling marquee with 8 feature badges
+- Added live interactive API console with 5 preset endpoint buttons
+- Added sidebar endpoint explorer with 16 endpoints and multi-language code tabs (cURL, JavaScript, Python)
+- Added 4 interactive playground cards (Search, Info, Episodes, Trending)
+- Added custom scrollbar styling
+- Added JetBrains Mono font for code blocks
+- Added 4-column grid footer with API, Resources, Legal sections
+- Added fixed header with scroll-aware blur/glass effect
+- Added ambient orb gradient animations
+- Added CTA section with gradient overlay
+- Color scheme updated to match MiruroAPI brand (cyan #38bdf8 + indigo #818cf8)
+- All branding updated: AniKotoAPI references → MiruroAPI
+- OG/Twitter meta tags updated for mirurotvapi.vercel.app
+- JSON-LD structured data updated with image, category, programmingModel
+- Real Miruro SVG favicons used in header and footer
+
 ## v1.2.0
 - Fixed critical response format bug: all endpoints now return {success: true, results: data}
 - Root cause: createApiRoutes() had (app, jsonResponse, jsonError) but was called with (jsonResponse, jsonError), shifting all params

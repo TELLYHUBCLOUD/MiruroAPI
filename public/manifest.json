@@ -1,0 +1,28 @@
+{
+  "name": "MiruroAPI",
+  "short_name": "MiruroAPI",
+  "description": "Free REST API for anime streaming data. 18 endpoints, 12 providers, M3U8 URLs. No API key required.",
+  "start_url": "/",
+  "display": "standalone",
+  "id": "/",
+  "scope": "/",
+  "lang": "en",
+  "orientation": "any",
+  "background_color": "#0A0A12",
+  "theme_color": "#A855F7",
+  "icons": [
+    {
+      "src": "/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icon-dark.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "categories": ["developer", "entertainment"]
+}
