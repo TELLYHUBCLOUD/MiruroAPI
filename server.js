@@ -1,57 +1,80 @@
+/*
+ * ======= • ======= • ======= • ======= • =======• =======
+ * MiruroAPI — server.js
+ * Repository: https://github.com/Shineii86/MiruroAPI
+ *
+ * @description
+ *   Main entry point for the MiruroAPI Express server.
+ *   Configures CORS, middleware, static files, Swagger docs,
+ *   API routes, and 404 handling. Starts the server on the
+ *   configured port.
+ *
+ * @exports
+ *   None (side-effect: starts Express server)
+ *
+ * @author  Shinei Nouzen
+ * @license MIT
+ * ======= • ======= • ======= • ======= • =======• =======
+ */
+
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
 require("dotenv").config();
 
+// ══════════════════════════════════════════════════════════════
+// SERVER CONFIGURATION
+// ══════════════════════════════════════════════════════════════
+
 const app = express();
 const PORT = process.env.PORT || 3000;
-
-// CORS
 const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(",")
   : null;
 
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      if (!allowedOrigins || allowedOrigins.includes("*") || !origin) {
-        return callback(null, true);
-      }
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-      return callback(null, true);
-    },
-    methods: ["GET", "OPTIONS"],
-    allowedHeaders: ["Content-Type"],
-  })
-);
+// ══════════════════════════════════════════════════════════════
+// CORS MIDDLEWARE
+// ══════════════════════════════════════════════════════════════
 
-// Security headers
+// NOTE: Single unified CORS middleware — handles all origin validation
 app.use((req, res, next) => {
-  res.setHeader("access-control-allow-origin", "*");
-  res.setHeader("X-Content-Type-Options", "nosniff");
-  res.setHeader("X-Frame-Options", "DENY");
-  res.setHeader("X-XSS-Protection", "1; mode=block");
+  const origin = req.headers.origin;
+  if (
+    !allowedOrigins ||
+    allowedOrigins.includes("*") ||
+    (origin && allowedOrigins.includes(origin))
+  ) {
+    res.setHeader("Access-Control-Allow-Origin", origin || "*");
+  }
+  res.setHeader("Access-Control-Allow-Methods", "GET");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  if (req.method === "OPTIONS") {
+    return res.status(204).end();
+  }
   next();
 });
 
-// Static files
-app.use(express.static(path.join(__dirname, "public")));
-
-// Health
-app.get("/api/health", (req, res) => {
-  res.json({
-    status: "ok",
-    version: "1.1.0",
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-    endpoints: 16,
-    providers: ["kiwi", "pewe", "bee", "bonk", "bun", "ally", "nun", "twin", "cog", "moo", "hop", "telli"],
-  });
+// ---- FEATURE: Security headers ----
+app.use((req, res, next) => {
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-XSS-Protection", "1; mode=block");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  next();
 });
 
-// Swagger UI page
+// ══════════════════════════════════════════════════════════════
+// STATIC FILES
+// ══════════════════════════════════════════════════════════════
+
+app.use(express.static(path.join(__dirname, "public"), { redirect: false }));
+
+// ══════════════════════════════════════════════════════════════
+// SWAGGER UI DOCS
+// ══════════════════════════════════════════════════════════════
+
+// ---- FEATURE: Interactive Swagger UI documentation at /docs ----
 app.get("/docs", (req, res) => {
   res.send(`<!DOCTYPE html>
 <html lang="en">
@@ -80,26 +103,101 @@ app.get("/docs", (req, res) => {
 </html>`);
 });
 
-// Routes
-const apiRoutes = require("./src/routes/apiRoutes");
-app.use("/api", apiRoutes);
+// ══════════════════════════════════════════════════════════════
+// RESPONSE HELPERS
+// ══════════════════════════════════════════════════════════════
 
-// SPA fallback
-app.get("*", (req, res) => {
+// ---- FEATURE: Standardized JSON response wrapper ----
+/**
+ * Wraps data in a standardized success JSON response.
+ *
+ * @param {object} res - Express response object
+ * @param {*} data - The data to return in the response
+ * @param {number} status - HTTP status code (default: 200)
+ */
+const jsonResponse = (res, data, status = 200) =>
+  res.status(status).json({ success: true, results: data });
+
+// ---- FEATURE: Standardized error response wrapper ----
+/**
+ * Returns a standardized error JSON response.
+ *
+ * @param {object} res - Express response object
+ * @param {string} message - Error message to return
+ * @param {number} status - HTTP status code (default: 500)
+ */
+const jsonError = (res, message = "Internal server error", status = 500) =>
+  res.status(status).json({ success: false, message });
+
+// ══════════════════════════════════════════════════════════════
+// RATE LIMITING
+// ══════════════════════════════════════════════════════════════
+
+// ---- FEATURE: Rate limiting (100 requests per minute per IP) ----
+const requestCounts = new Map();
+app.use((req, res, next) => {
+  const ip = req.ip || req.connection.remoteAddress;
+  const now = Date.now();
+  const windowMs = 60000;
+  const maxRequests = 100;
+
+  if (!requestCounts.has(ip)) {
+    requestCounts.set(ip, []);
+  }
+
+  const timestamps = requestCounts.get(ip).filter((t) => now - t < windowMs);
+  requestCounts.set(ip, timestamps);
+
+  if (timestamps.length >= maxRequests) {
+    return res.status(429).json({
+      success: false,
+      message: "Rate limit exceeded. Try again later.",
+    });
+  }
+
+  timestamps.push(now);
+  next();
+});
+
+// ══════════════════════════════════════════════════════════════
+// API ROUTES
+// ══════════════════════════════════════════════════════════════
+
+const apiRoutes = require("./src/routes/apiRoutes");
+app.use("/api", apiRoutes(jsonResponse, jsonError));
+
+// ══════════════════════════════════════════════════════════════
+// 404 HANDLER
+// ══════════════════════════════════════════════════════════════
+
+// ---- FEATURE: Global error handler ----
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(err.status || 500).json({
+    success: false,
+    message: err.message || "Internal server error",
+  });
+});
+
+// ---- FEATURE: Catch-all 404 handler for undefined routes ----
+app.use((req, res) => {
   if (req.path.startsWith("/api/")) {
-    return res.status(404).json({ success: false, message: "Endpoint not found" });
+    return res.status(404).json({
+      success: false,
+      message: "Endpoint not found",
+    });
   }
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-// Global error handler
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ success: false, message: "Internal server error" });
-});
+// ══════════════════════════════════════════════════════════════
+// SERVER START
+// ══════════════════════════════════════════════════════════════
 
 app.listen(PORT, () => {
-  console.log(`MiruroAPI running on port ${PORT}`);
+  console.info(`MiruroAPI listening at ${PORT}`);
 });
 
 module.exports = app;
+
+// ══════════════════════════════════════════════════════════════ END: server.js

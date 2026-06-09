@@ -1,20 +1,85 @@
+/*
+ * ======= • ======= • ======= • ======= • =======• =======
+ * MiruroAPI — pipe.js
+ * Repository: https://github.com/Shineii86/MiruroAPI
+ *
+ * @description
+ *   Miruro streaming pipe integration. Handles encoding/decoding
+ *   of the secure/pipe tunnel that Miruro uses for episode lists
+ *   and streaming sources. Decodes base64+gzip responses and
+ *   injects simplified slug-based episode IDs.
+ *
+ * @exports
+ *   getEpisodes, getSources, getWatchSources
+ *
+ * @author  Shinei Nouzen
+ * @license MIT
+ * ======= • ======= • ======= • ======= • =======• =======
+ */
+
 const axios = require("axios");
 const { Buffer } = require("buffer");
 const zlib = require("zlib");
 
+// ══════════════════════════════════════════════════════════════
+// MIRURO PIPE CONFIGURATION
+// ══════════════════════════════════════════════════════════════
+
+/**
+ * Miruro's secure pipe endpoint URL.
+ * All streaming requests go through this base64+gzip encoded tunnel.
+ *
+ * @type {string}
+ */
 const MIRURO_PIPE_URL = "https://www.miruro.tv/api/secure/pipe";
+
+/**
+ * Request headers mimicking a browser.
+ * Referer is required for the pipe endpoint to accept requests.
+ *
+ * @type {object}
+ */
 const HEADERS = {
   "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
   Referer: "https://www.miruro.tv/",
 };
 
-function encodePipeRequest(payload) {
+// ══════════════════════════════════════════════════════════════
+// ENCODING / DECODING UTILITIES
+// ══════════════════════════════════════════════════════════════
+
+// ---- FEATURE: Base64url encode pipe request payload ----
+/**
+ * Encodes a JSON payload into the base64url format expected by the pipe endpoint.
+ * Used for all pipe API requests (episodes, sources).
+ *
+ * @param {object} payload - The request payload to encode
+ * @returns {string} Base64url-encoded string (no padding)
+ *
+ * @example
+ *   const encoded = encodePipeRequest({ path: "episodes", method: "GET", query: { anilistId: 20 } });
+ */
+const encodePipeRequest = (payload) => {
   const json = JSON.stringify(payload);
   return Buffer.from(json).toString("base64url");
-}
+};
 
-function decodePipeResponse(encodedStr) {
+// ---- FEATURE: Decode base64+gzip pipe response ----
+/**
+ * Decodes a pipe response from base64url + gzip format into a plain object.
+ * The Miruro pipe returns all responses in this compressed format.
+ *
+ * @param {string} encodedStr - The base64url-encoded gzipped response
+ * @returns {object} Decoded JSON object
+ * @throws {Error} If decoding or decompression fails
+ *
+ * @example
+ *   const data = decodePipeResponse(res.text);
+ *   console.log(data.providers); // { kiwi: {...}, bee: {...} }
+ */
+const decodePipeResponse = (encodedStr) => {
   try {
+    // NOTE: Add padding if necessary (base64url may omit trailing =)
     const padded = encodedStr + "=".repeat((4 - (encodedStr.length % 4)) % 4);
     const compressed = Buffer.from(padded, "base64url");
     const decompressed = zlib.gunzipSync(compressed);
@@ -22,20 +87,41 @@ function decodePipeResponse(encodedStr) {
   } catch (e) {
     throw new Error("Failed to decode pipe response: " + e.message);
   }
-}
+};
 
-function translateId(encodedId) {
+// ---- FEATURE: Decode base64 episode ID to plain text ----
+/**
+ * Decodes a base64-encoded episode ID back to plain text.
+ * Episode IDs from the pipe are base64-encoded with ":" separators.
+ *
+ * @param {string} encodedId - The base64url-encoded episode ID
+ * @returns {string} Decoded plain text ID, or original if decoding fails
+ *
+ * @example
+ *   const decoded = translateId("YW5pbWVwaGU6MjA6c3ViOjE=");
+ *   // returns "animepahe:20:sub:1"
+ */
+const translateId = (encodedId) => {
   try {
     const padded = encodedId + "=".repeat((4 - (encodedId.length % 4)) % 4);
     const decoded = Buffer.from(padded, "base64url").toString("utf-8");
+    // NOTE: Only return decoded value if it looks like a valid ID (contains ":")
     if (decoded.includes(":")) return decoded;
     return encodedId;
   } catch {
     return encodedId;
   }
-}
+};
 
-function deepTranslate(obj) {
+// ---- FEATURE: Recursively decode all base64 IDs in a nested object ----
+/**
+ * Walks a JSON structure and decodes any base64 "id" fields.
+ * Handles nested objects and arrays of objects.
+ *
+ * @param {object|Array} obj - The object or array to process
+ * @returns {object|Array} The same object with decoded IDs (mutated in place)
+ */
+const deepTranslate = (obj) => {
   if (obj && typeof obj === "object") {
     for (const key of Object.keys(obj)) {
       if (key === "id" && typeof obj[key] === "string") {
@@ -46,33 +132,73 @@ function deepTranslate(obj) {
     }
   }
   return obj;
-}
+};
 
-function injectSourceSlugs(data, anilistId) {
+// ══════════════════════════════════════════════════════════════
+// EPISODE ID INJECTION
+// ══════════════════════════════════════════════════════════════
+
+// ---- FEATURE: Transform episode IDs into simplified path-based slugs ----
+/**
+ * Converts raw pipe episode IDs into clean slug format:
+ *   watch/{provider}/{anilistId}/{category}/{prefix}-{number}
+ *
+ * This makes episode IDs human-readable and URL-safe for the /watch endpoint.
+ *
+ * @param {object} data - Raw pipe response with providers
+ * @param {number} anilistId - The AniList anime ID
+ * @returns {object} Modified data with slug-based episode IDs
+ *
+ * @example
+ *   // Before: "animepahe:20:sub:1"
+ *   // After:  "watch/kiwi/20/sub/animepahe-1"
+ */
+const injectSourceSlugs = (data, anilistId) => {
   const providers = data.providers || {};
+
   for (const [provName, provData] of Object.entries(providers)) {
     if (!provData || typeof provData !== "object") continue;
+
     let episodes = provData.episodes;
     if (!episodes) continue;
+
+    // NOTE: Some providers return a flat array — wrap it in { sub: [...] }
     if (Array.isArray(episodes)) {
       provData.episodes = { sub: episodes };
       episodes = provData.episodes;
     }
+
     for (const [category, epList] of Object.entries(episodes)) {
       if (!Array.isArray(epList)) continue;
+
       for (const ep of epList) {
         if (ep.id && ep.number) {
           const origId = ep.id;
+          // NOTE: Take only the prefix before ":" for the slug
           const prefix = origId.includes(":") ? origId.split(":")[0] : origId;
           ep.id = `watch/${provName}/${anilistId}/${category}/${prefix}-${ep.number}`;
         }
       }
     }
   }
-  return data;
-}
 
-async function fetchRawEpisodes(anilistId) {
+  return data;
+};
+
+// ══════════════════════════════════════════════════════════════
+// PIPE API FUNCTIONS
+// ══════════════════════════════════════════════════════════════
+
+// ---- FEATURE: Fetch raw decoded episode data from Miruro pipe ----
+/**
+ * Internal helper to fetch and decode raw episode data from the pipe.
+ * Sends a base64-encoded request and decodes the gzipped response.
+ *
+ * @param {number} anilistId - The AniList anime ID
+ * @returns {Promise<object>} Decoded episode data with providers
+ * @throws {Error} If the pipe request fails
+ */
+const fetchRawEpisodes = async (anilistId) => {
   const payload = {
     path: "episodes",
     method: "GET",
@@ -80,29 +206,60 @@ async function fetchRawEpisodes(anilistId) {
     body: null,
     version: "0.1.0",
   };
+
   const encodedReq = encodePipeRequest(payload);
   const res = await axios.get(`${MIRURO_PIPE_URL}?e=${encodedReq}`, {
     headers: HEADERS,
     timeout: 15000,
   });
+
   if (res.status !== 200) throw new Error(`Pipe request failed: ${res.status}`);
   const data = decodePipeResponse(res.text || res.data);
   return deepTranslate(data);
-}
+};
 
-async function getEpisodes(anilistId) {
+// ---- FEATURE: Get episodes with slug-based IDs ----
+/**
+ * Fetches the full episode list for an anime from all providers.
+ * Returns episodes with simplified slug-based IDs for the /watch endpoint.
+ *
+ * @param {number} anilistId - The AniList anime ID
+ * @returns {Promise<object>} Episode data with providers and mappings
+ *
+ * @example
+ *   const episodes = await getEpisodes(20); // Naruto
+ *   console.log(Object.keys(episodes.providers)); // ["kiwi", "bee", "bonk", ...]
+ */
+const getEpisodes = async (anilistId) => {
   const data = await fetchRawEpisodes(anilistId);
   const result = injectSourceSlugs(data, anilistId);
-  // Ensure mappings field is present (like Walter's API)
+
+  // NOTE: Ensure mappings field is present (like Walter's API)
   if (!result.mappings) {
     result.mappings = { anilistId };
     if (result.malId) result.mappings.malId = result.malId;
     if (result.kitsuId) result.mappings.kitsuId = result.kitsuId;
   }
-  return result;
-}
 
-async function getSources(episodeId, provider, anilistId, category = "sub") {
+  return result;
+};
+
+// ---- FEATURE: Get streaming sources (detailed endpoint) ----
+/**
+ * Fetches M3U8 streaming sources for a specific episode.
+ * This is the detailed/manual endpoint — use /watch for simpler access.
+ *
+ * @param {string} episodeId - The raw episode ID from the pipe
+ * @param {string} provider - Provider name (e.g., "kiwi", "bee", "bonk")
+ * @param {number} anilistId - The AniList anime ID
+ * @param {string} [category="sub"] - Audio category ("sub" or "dub")
+ * @returns {Promise<object>} Streaming sources with M3U8 URLs, subtitles, timestamps
+ *
+ * @example
+ *   const sources = await getSources("animepahe:20:sub:1", "kiwi", 20, "sub");
+ *   console.log(sources.streams[0].url); // "https://.../master.m3u8"
+ */
+const getSources = async (episodeId, provider, anilistId, category = "sub") => {
   const encId = Buffer.from(episodeId).toString("base64url");
   const payload = {
     path: "sources",
@@ -111,33 +268,57 @@ async function getSources(episodeId, provider, anilistId, category = "sub") {
     body: null,
     version: "0.1.0",
   };
+
   const encodedReq = encodePipeRequest(payload);
   const res = await axios.get(`${MIRURO_PIPE_URL}?e=${encodedReq}`, {
     headers: HEADERS,
     timeout: 15000,
   });
+
   if (res.status !== 200) throw new Error(`Pipe sources request failed: ${res.status}`);
   return deepTranslate(decodePipeResponse(res.text || res.data));
-}
+};
 
-async function getWatchSources(provider, anilistId, category, slug) {
+// ---- FEATURE: Get streaming sources (simple slug-based endpoint) ----
+/**
+ * Resolves a slug-based episode ID and fetches its streaming sources.
+ * This is the recommended endpoint — just pass the slug from /episodes.
+ *
+ * @param {string} provider - Provider name (e.g., "kiwi", "bee")
+ * @param {number} anilistId - The AniList anime ID
+ * @param {string} category - Audio category ("sub" or "dub")
+ * @param {string} slug - Episode slug (e.g., "animepahe-1")
+ * @returns {Promise<object>} Streaming sources with M3U8 URLs, subtitles, timestamps
+ * @throws {Error} If provider or episode slug is not found
+ *
+ * @example
+ *   const sources = await getWatchSources("kiwi", 20, "sub", "animepahe-1");
+ *   console.log(sources.streams[0].url); // "https://.../master.m3u8"
+ */
+const getWatchSources = async (provider, anilistId, category, slug) => {
   const data = await fetchRawEpisodes(anilistId);
   const provData = (data.providers || {})[provider];
+
   if (!provData) throw new Error(`Provider ${provider} not found`);
+
   const episodes = provData.episodes?.[category] || [];
   let targetId = null;
+
+  // NOTE: Resolve slug back to the original pipe episode ID
   for (const ep of episodes) {
     const origId = ep.id || "";
     const prefix = origId.includes(":") ? origId.split(":")[0] : origId;
     const generated = `${prefix}-${ep.number}`;
+
     if (generated === slug) {
       targetId = origId;
       break;
     }
   }
+
   if (!targetId) throw new Error(`Episode slug '${slug}' not found for provider ${provider}`);
   return getSources(targetId, provider, anilistId, category);
-}
+};
 
 module.exports = {
   getEpisodes,
@@ -149,3 +330,5 @@ module.exports = {
   deepTranslate,
   injectSourceSlugs,
 };
+
+// ══════════════════════════════════════════════════════════════ END: pipe.js
