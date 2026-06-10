@@ -1658,6 +1658,8 @@ Free to use, modify, and distribute — see the [LICENSE](LICENSE) file for deta
 
 <p align="center">
   <b>Made With ❤️ For The Anime Community</b>
+  
   <br/><br/>
+  
   <sub>© [Shinei Nouzen](https://t.me/Shineii86). All Rights Reserved.</sub>
 </p>
