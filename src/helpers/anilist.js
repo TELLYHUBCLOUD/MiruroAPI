@@ -584,6 +584,341 @@ const filterAnime = async ({
   };
 };
 
+// ══════════════════════════════════════════════════════════════
+// GENRES & CATEGORIES
+// ══════════════════════════════════════════════════════════════
+
+// ---- FEATURE: Get all available genres ----
+/**
+ * Returns the complete list of AniList genres.
+ *
+ * @returns {Promise<Array>} Array of genre name strings
+ */
+const getAllGenres = async () => {
+  const gql = `query { GenreCollection }`;
+  const data = await anilistQuery(gql);
+  return data.GenreCollection;
+};
+
+// ---- FEATURE: Get all available tags ----
+/**
+ * Returns the complete list of AniList tags with metadata.
+ *
+ * @returns {Promise<Array>} Array of tag objects { name, description, category, rank, isGeneralSpoiler, isMediaSpoiler, isAdult }
+ */
+const getAllTags = async () => {
+  const gql = `query { TagCollection { name description category rank isGeneralSpoiler isMediaSpoiler isAdult } }`;
+  const data = await anilistQuery(gql);
+  return data.TagCollection;
+};
+
+// ══════════════════════════════════════════════════════════════
+// TOP & TRENDING
+// ══════════════════════════════════════════════════════════════
+
+// ---- FEATURE: Top anime by score (all time) ----
+/**
+ * Fetches top-rated anime of all time sorted by score.
+ *
+ * @param {number} [page=1] - Page number
+ * @param {number} [perPage=20] - Results per page
+ * @returns {Promise<object>} Paginated top anime results
+ */
+const getTopAnime = async (page = 1, perPage = 20) => {
+  const gql = `
+    query ($page: Int, $perPage: Int) {
+      Page(page: $page, perPage: $perPage) {
+        pageInfo { total currentPage lastPage hasNextPage perPage }
+        media(type: ANIME, sort: SCORE_DESC) {
+          ${MEDIA_LIST_FIELDS}
+        }
+      }
+    }
+  `;
+  const data = await anilistQuery(gql, { page, perPage });
+  const pageData = data.Page;
+
+  return {
+    page: pageData.pageInfo.currentPage,
+    perPage: pageData.pageInfo.perPage,
+    total: pageData.pageInfo.total,
+    hasNextPage: pageData.pageInfo.hasNextPage,
+    results: pageData.media,
+  };
+};
+
+// ---- FEATURE: Daily trending anime ----
+/**
+ * Fetches currently trending anime (last 7 days).
+ *
+ * @param {number} [page=1] - Page number
+ * @param {number} [perPage=20] - Results per page
+ * @returns {Promise<object>} Paginated trending results
+ */
+const getTrendingDaily = async (page = 1, perPage = 20) => {
+  const gql = `
+    query ($page: Int, $perPage: Int) {
+      Page(page: $page, perPage: $perPage) {
+        pageInfo { total currentPage lastPage hasNextPage perPage }
+        media(type: ANIME, sort: TRENDING_DESC, trending: 7) {
+          ${MEDIA_LIST_FIELDS}
+        }
+      }
+    }
+  `;
+  const data = await anilistQuery(gql, { page, perPage });
+  const pageData = data.Page;
+
+  return {
+    page: pageData.pageInfo.currentPage,
+    perPage: pageData.pageInfo.perPage,
+    total: pageData.pageInfo.total,
+    hasNextPage: pageData.pageInfo.hasNextPage,
+    results: pageData.media,
+  };
+};
+
+// ---- FEATURE: Weekly trending anime ----
+/**
+ * Fetches currently trending anime (last 30 days).
+ *
+ * @param {number} [page=1] - Page number
+ * @param {number} [perPage=20] - Results per page
+ * @returns {Promise<object>} Paginated trending results
+ */
+const getTrendingWeekly = async (page = 1, perPage = 20) => {
+  const gql = `
+    query ($page: Int, $perPage: Int) {
+      Page(page: $page, perPage: $perPage) {
+        pageInfo { total currentPage lastPage hasNextPage perPage }
+        media(type: ANIME, sort: TRENDING_DESC, trending: 30) {
+          ${MEDIA_LIST_FIELDS}
+        }
+      }
+    }
+  `;
+  const data = await anilistQuery(gql, { page, perPage });
+  const pageData = data.Page;
+
+  return {
+    page: pageData.pageInfo.currentPage,
+    perPage: pageData.pageInfo.perPage,
+    total: pageData.pageInfo.total,
+    hasNextPage: pageData.pageInfo.hasNextPage,
+    results: pageData.media,
+  };
+};
+
+// ══════════════════════════════════════════════════════════════
+// SEASONAL & STUDIO
+// ══════════════════════════════════════════════════════════════
+
+// ---- FEATURE: Seasonal anime by year and season ----
+/**
+ * Fetches anime for a specific season and year.
+ *
+ * @param {number} year - The year (e.g., 2025)
+ * @param {string} season - The season (WINTER, SPRING, SUMMER, FALL)
+ * @param {number} [page=1] - Page number
+ * @param {number} [perPage=20] - Results per page
+ * @returns {Promise<object>} Paginated seasonal anime results
+ */
+const getSeasonalAnime = async (year, season, page = 1, perPage = 20) => {
+  const gql = `
+    query ($year: Int, $season: MediaSeason, $page: Int, $perPage: Int) {
+      Page(page: $page, perPage: $perPage) {
+        pageInfo { total currentPage lastPage hasNextPage perPage }
+        media(type: ANIME, season: $season, seasonYear: $year, sort: POPULARITY_DESC) {
+          ${MEDIA_LIST_FIELDS}
+        }
+      }
+    }
+  `;
+  const data = await anilistQuery(gql, { year, season: season.toUpperCase(), page, perPage });
+  const pageData = data.Page;
+
+  return {
+    page: pageData.pageInfo.currentPage,
+    perPage: pageData.pageInfo.perPage,
+    total: pageData.pageInfo.total,
+    hasNextPage: pageData.pageInfo.hasNextPage,
+    results: pageData.media,
+  };
+};
+
+// ---- FEATURE: Anime by studio name ----
+/**
+ * Fetches all anime produced by a specific studio.
+ *
+ * @param {string} studioName - The studio name to search for
+ * @param {number} [page=1] - Page number
+ * @param {number} [perPage=20] - Results per page
+ * @returns {Promise<object>} Paginated studio anime results
+ */
+const getAnimeByStudio = async (studioName, page = 1, perPage = 20) => {
+  const gql = `
+    query ($name: String, $page: Int, $perPage: Int) {
+      Studio(search: $name) {
+        id name isAnimationStudio siteUrl
+        media(type: ANIME, sort: POPULARITY_DESC, page: $page, perPage: $perPage) {
+          pageInfo { total currentPage lastPage hasNextPage perPage }
+          nodes { ${MEDIA_LIST_FIELDS} }
+        }
+      }
+    }
+  `;
+  const data = await anilistQuery(gql, { name: studioName, page, perPage });
+  const studio = data.Studio;
+
+  if (!studio) throw new Error("Studio not found");
+
+  return {
+    studio: {
+      id: studio.id,
+      name: studio.name,
+      isAnimationStudio: studio.isAnimationStudio,
+      siteUrl: studio.siteUrl,
+    },
+    page: studio.media.pageInfo.currentPage,
+    perPage: studio.media.pageInfo.perPage,
+    total: studio.media.pageInfo.total,
+    hasNextPage: studio.media.pageInfo.hasNextPage,
+    results: studio.media.nodes,
+  };
+};
+
+// ══════════════════════════════════════════════════════════════
+// CHARACTER & STAFF
+// ══════════════════════════════════════════════════════════════
+
+// ---- FEATURE: Character detail with anime list ----
+/**
+ * Fetches detailed character info including all anime appearances.
+ *
+ * @param {number} id - AniList character ID
+ * @returns {Promise<object>} Character details with anime list
+ */
+const getCharacterInfo = async (id) => {
+  const gql = `
+    query ($id: Int) {
+      Character(id: $id) {
+        id name { full native userPreferred }
+        image { large medium }
+        description gender favourites siteUrl
+        dateOfBirth { year month day }
+        dateOfDeath { year month day }
+        age bloodType
+        media(perPage: 25, sort: POPULARITY_DESC) {
+          pageInfo { total currentPage lastPage hasNextPage perPage }
+          edges {
+            role
+            node { id title { romaji english } coverImage { large } format episodes status meanScore }
+          }
+        }
+      }
+    }
+  `;
+  const data = await anilistQuery(gql, { id });
+  if (!data.Character) throw new Error("Character not found");
+  return data.Character;
+};
+
+// ---- FEATURE: Staff detail with anime list ----
+/**
+ * Fetches detailed staff info including all anime works.
+ *
+ * @param {number} id - AniList staff ID
+ * @returns {Promise<object>} Staff details with anime list
+ */
+const getStaffInfo = async (id) => {
+  const gql = `
+    query ($id: Int) {
+      Staff(id: $id) {
+        id name { full native userPreferred }
+        image { large medium }
+        description gender favourites siteUrl
+        dateOfBirth { year month day }
+        dateOfDeath { year month day }
+        age homeTown yearsActive
+        staffMedia(perPage: 25, sort: POPULARITY_DESC) {
+          pageInfo { total currentPage lastPage hasNextPage perPage }
+          edges {
+            role
+            node { id title { romaji english } coverImage { large } format episodes status meanScore }
+          }
+        }
+      }
+    }
+  `;
+  const data = await anilistQuery(gql, { id });
+  if (!data.Staff) throw new Error("Staff not found");
+  return data.Staff;
+};
+
+// ---- FEATURE: Search characters by name ----
+/**
+ * Searches AniList characters by name.
+ *
+ * @param {string} query - Character name to search
+ * @param {number} [page=1] - Page number
+ * @param {number} [perPage=20] - Results per page
+ * @returns {Promise<object>} Paginated character search results
+ */
+const searchCharacters = async (query, page = 1, perPage = 20) => {
+  const gql = `
+    query ($search: String, $page: Int, $perPage: Int) {
+      Page(page: $page, perPage: $perPage) {
+        pageInfo { total currentPage lastPage hasNextPage perPage }
+        characters(search: $search, sort: SEARCH_MATCH) {
+          id name { full native userPreferred } image { large medium } gender favourites siteUrl
+        }
+      }
+    }
+  `;
+  const data = await anilistQuery(gql, { search: query, page, perPage });
+  const pageData = data.Page;
+
+  return {
+    page: pageData.pageInfo.currentPage,
+    perPage: pageData.pageInfo.perPage,
+    total: pageData.pageInfo.total,
+    hasNextPage: pageData.pageInfo.hasNextPage,
+    results: pageData.characters,
+  };
+};
+
+// ---- FEATURE: Search staff by name ----
+/**
+ * Searches AniList staff by name.
+ *
+ * @param {string} query - Staff name to search
+ * @param {number} [page=1] - Page number
+ * @param {number} [perPage=20] - Results per page
+ * @returns {Promise<object>} Paginated staff search results
+ */
+const searchStaff = async (query, page = 1, perPage = 20) => {
+  const gql = `
+    query ($search: String, $page: Int, $perPage: Int) {
+      Page(page: $page, perPage: $perPage) {
+        pageInfo { total currentPage lastPage hasNextPage perPage }
+        staff(search: $search, sort: SEARCH_MATCH) {
+          id name { full native userPreferred } image { large medium } gender favourites siteUrl
+        }
+      }
+    }
+  `;
+  const data = await anilistQuery(gql, { search: query, page, perPage });
+  const pageData = data.Page;
+
+  return {
+    page: pageData.pageInfo.currentPage,
+    perPage: pageData.pageInfo.perPage,
+    total: pageData.pageInfo.total,
+    hasNextPage: pageData.pageInfo.hasNextPage,
+    results: pageData.staff,
+  };
+};
+
 module.exports = {
   anilistQuery,
   searchAnime,
@@ -596,6 +931,17 @@ module.exports = {
   getSpotlight,
   getSchedule,
   filterAnime,
+  getAllGenres,
+  getAllTags,
+  getTopAnime,
+  getTrendingDaily,
+  getTrendingWeekly,
+  getSeasonalAnime,
+  getAnimeByStudio,
+  getCharacterInfo,
+  getStaffInfo,
+  searchCharacters,
+  searchStaff,
   MEDIA_LIST_FIELDS,
   MEDIA_FULL_FIELDS,
 };

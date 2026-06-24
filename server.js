@@ -5,9 +5,8 @@
  *
  * @description
  *   Main entry point for the MiruroAPI Express server.
- *   Configures CORS, middleware, static files, Swagger docs,
- *   API routes, and 404 handling. Starts the server on the
- *   configured port.
+ *   Configures CORS, compression, logging, security headers,
+ *   rate limiting, API routes, and 404 handling.
  *
  * @exports
  *   None (side-effect: starts Express server)
@@ -19,7 +18,9 @@
 
 const express = require("express");
 const cors = require("cors");
+const compression = require("compression");
 const path = require("path");
+const fs = require("fs");
 require("dotenv").config();
 
 // ══════════════════════════════════════════════════════════════
@@ -28,15 +29,63 @@ require("dotenv").config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const startTime = Date.now();
 const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(",")
   : null;
 
 // ══════════════════════════════════════════════════════════════
+// COMPRESSION
+// ══════════════════════════════════════════════════════════════
+
+// ---- FEATURE: Gzip compression — reduces response size by 30-70% ----
+app.use(compression({
+  level: 6,
+  threshold: 1024,
+  filter: (req, res) => {
+    if (req.headers["x-no-compression"]) return false;
+    return compression.filter(req, res);
+  },
+}));
+
+// ══════════════════════════════════════════════════════════════
+// REQUEST LOGGING
+// ══════════════════════════════════════════════════════════════
+
+// ---- FEATURE: Request logging — method, path, status, response time ----
+app.use((req, res, next) => {
+  const start = Date.now();
+  const originalEnd = res.end;
+
+  res.end = function (...args) {
+    const duration = Date.now() - start;
+    const status = res.statusCode;
+    const ip =
+      req.headers["x-forwarded-for"]?.split(",")[0]?.trim() ||
+      req.ip ||
+      req.connection.remoteAddress;
+
+    // NOTE: Only log API requests, skip static files
+    if (req.path.startsWith("/api/")) {
+      const log = `[${new Date().toISOString()}] ${req.method} ${req.path} ${status} ${duration}ms ${ip}`;
+      if (status >= 400) {
+        console.error(log);
+      } else {
+        console.log(log);
+      }
+    }
+
+    originalEnd.apply(this, args);
+  };
+
+  next();
+});
+
+// ══════════════════════════════════════════════════════════════
 // CORS MIDDLEWARE
 // ══════════════════════════════════════════════════════════════
 
-// NOTE: Single unified CORS middleware — handles all origin validation
+// ---- FEATURE: Unified CORS middleware with preflight handling ----
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   if (
@@ -46,13 +95,19 @@ app.use((req, res, next) => {
   ) {
     res.setHeader("Access-Control-Allow-Origin", origin || "*");
   }
-  res.setHeader("Access-Control-Allow-Methods", "GET");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-No-Compression");
+  res.setHeader("Access-Control-Max-Age", "86400");
+
   if (req.method === "OPTIONS") {
     return res.status(204).end();
   }
   next();
 });
+
+// ══════════════════════════════════════════════════════════════
+// SECURITY HEADERS
+// ══════════════════════════════════════════════════════════════
 
 // ---- FEATURE: Security headers ----
 app.use((req, res, next) => {
@@ -65,17 +120,38 @@ app.use((req, res, next) => {
 });
 
 // ══════════════════════════════════════════════════════════════
+// CACHE HEADERS
+// ══════════════════════════════════════════════════════════════
+
+// ---- FEATURE: Cache-Control headers for API responses ----
+app.use("/api", (req, res, next) => {
+  // NOTE: Different cache durations based on endpoint type
+  if (req.path.includes("/health") || req.path.includes("/stats")) {
+    res.setHeader("Cache-Control", "no-store");
+  } else if (req.path.includes("/search") || req.path.includes("/suggestions")) {
+    res.setHeader("Cache-Control", "public, max-age=60");
+  } else if (req.path.includes("/episodes") || req.path.includes("/sources") || req.path.includes("/watch")) {
+    res.setHeader("Cache-Control", "public, max-age=120");
+  } else {
+    res.setHeader("Cache-Control", "public, max-age=300");
+  }
+  res.setHeader("Vary", "Accept-Encoding");
+  next();
+});
+
+// ══════════════════════════════════════════════════════════════
 // STATIC FILES
 // ══════════════════════════════════════════════════════════════
 
-app.use(express.static(path.join(__dirname, "public"), { redirect: false }));
+app.use(express.static(path.join(__dirname, "public"), {
+  redirect: false,
+  maxAge: "1d",
+}));
 
 // ══════════════════════════════════════════════════════════════
 // CLEAN URL ROUTES
 // ══════════════════════════════════════════════════════════════
 
-// ---- FEATURE: Clean URL routes (no .html extension) ----
-const fs = require("fs");
 const publicDir = path.join(__dirname, "public");
 
 app.get("/tos", (req, res) => {
@@ -90,7 +166,6 @@ app.get("/privacy", (req, res) => {
 // SWAGGER UI DOCS
 // ══════════════════════════════════════════════════════════════
 
-// ---- FEATURE: Interactive Swagger UI documentation at /docs ----
 app.get("/docs", (req, res) => {
   res.sendFile(path.join(publicDir, "docs.html"));
 });
@@ -99,25 +174,9 @@ app.get("/docs", (req, res) => {
 // RESPONSE HELPERS
 // ══════════════════════════════════════════════════════════════
 
-// ---- FEATURE: Standardized JSON response wrapper ----
-/**
- * Wraps data in a standardized success JSON response.
- *
- * @param {object} res - Express response object
- * @param {*} data - The data to return in the response
- * @param {number} status - HTTP status code (default: 200)
- */
 const jsonResponse = (res, data, status = 200) =>
   res.status(status).json({ success: true, results: data });
 
-// ---- FEATURE: Standardized error response wrapper ----
-/**
- * Returns a standardized error JSON response.
- *
- * @param {object} res - Express response object
- * @param {string} message - Error message to return
- * @param {number} status - HTTP status code (default: 500)
- */
 const jsonError = (res, message = "Internal server error", status = 500) =>
   res.status(status).json({ success: false, message });
 
@@ -152,7 +211,7 @@ app.use((req, res, next) => {
 
   timestamps.push(now);
 
-  // NOTE: Periodic cleanup — prune expired IP entries every 60s to prevent memory leak
+  // NOTE: Periodic cleanup — prune expired IP entries when map grows large
   if (requestCounts.size > 200) {
     for (const [key, val] of requestCounts) {
       if (val.filter((t) => now - t < windowMs).length === 0) {
@@ -169,7 +228,7 @@ app.use((req, res, next) => {
 // ══════════════════════════════════════════════════════════════
 
 const apiRoutes = require("./src/routes/apiRoutes");
-app.use("/api", apiRoutes(jsonResponse, jsonError));
+app.use("/api", apiRoutes(jsonResponse, jsonError, startTime));
 
 // ══════════════════════════════════════════════════════════════
 // 404 HANDLER
@@ -177,7 +236,7 @@ app.use("/api", apiRoutes(jsonResponse, jsonError));
 
 // ---- FEATURE: Global error handler ----
 app.use((err, req, res, next) => {
-  console.error(err.stack);
+  console.error(`[ERROR] ${err.message}`);
   res.status(err.status || 500).json({
     success: false,
     message: err.message || "Internal server error",
@@ -204,7 +263,7 @@ app.use((req, res) => {
 // ══════════════════════════════════════════════════════════════
 
 app.listen(PORT, () => {
-  console.info(`MiruroAPI listening at ${PORT}`);
+  console.log(`[${new Date().toISOString()}] MiruroAPI v2.0.0 listening at ${PORT}`);
 });
 
 module.exports = app;

@@ -129,6 +129,14 @@ const clearCache = () => {
   cache.clear();
 };
 
-module.exports = { getCached, setCache, clearCache };
+// ---- FEATURE: Get current cache size ----
+/**
+ * Returns the current number of entries in the cache.
+ *
+ * @returns {number} Current cache size
+ */
+const getCacheSize = () => cache.size;
+
+module.exports = { getCached, setCache, clearCache, getCacheSize };
 
 // ══════════════════════════════════════════════════════════════ END: cache.js

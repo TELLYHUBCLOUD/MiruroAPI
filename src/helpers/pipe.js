@@ -320,10 +320,152 @@ const getWatchSources = async (provider, anilistId, category, slug) => {
   return getSources(targetId, provider, anilistId, category);
 };
 
+// ══════════════════════════════════════════════════════════════
+// SUBTITLE EXTRACTION
+// ══════════════════════════════════════════════════════════════
+
+// ---- FEATURE: Extract subtitle URLs from streaming sources ----
+/**
+ * Extracts and formats subtitle URLs from the pipe sources response.
+ * Subtitles are usually in WebVTT format with language tags.
+ *
+ * @param {object} sources - The sources response from getSources/getWatchSources
+ * @returns {Array} Array of subtitle objects { url, label, language, format }
+ */
+const extractSubtitles = (sources) => {
+  const subtitles = sources.subtitles || sources.captions || [];
+  return subtitles.map((sub) => ({
+    url: sub.url || sub.file,
+    label: sub.label || sub.name || "Unknown",
+    language: sub.lang || sub.language || sub.label || "en",
+    format: sub.format || "vtt",
+  }));
+};
+
+// ══════════════════════════════════════════════════════════════
+// QUALITY FALLBACK
+// ══════════════════════════════════════════════════════════════
+
+// ---- FEATURE: Get best available stream with quality fallback ----
+/**
+ * Returns the best available HLS stream with automatic quality fallback.
+ * Tries 1080p → 720p → 360p in order.
+ *
+ * @param {object} sources - The sources response
+ * @param {string} [preferredQuality="1080p"] - Preferred quality
+ * @returns {object|null} Best available stream object or null
+ */
+const getBestStream = (sources, preferredQuality = "1080p") => {
+  const streams = (sources.streams || []).filter((s) => s.type === "hls" && s.url);
+  if (streams.length === 0) return null;
+
+  // NOTE: Try preferred quality first, then fallback
+  const qualityOrder = ["1080p", "720p", "480p", "360p"];
+  const startIdx = qualityOrder.indexOf(preferredQuality);
+  const ordered = startIdx >= 0
+    ? qualityOrder.slice(startIdx)
+    : qualityOrder;
+
+  for (const q of ordered) {
+    const match = streams.find((s) => s.quality === q);
+    if (match) return match;
+  }
+
+  // NOTE: Return first available if no quality match
+  return streams[0];
+};
+
+// ══════════════════════════════════════════════════════════════
+// DOWNLOAD URL
+// ══════════════════════════════════════════════════════════════
+
+// ---- FEATURE: Get download URL for an episode ----
+/**
+ * Fetches the download URL for a specific episode from the pipe.
+ * Returns the direct download link if available.
+ *
+ * @param {string} provider - Provider name
+ * @param {number} anilistId - The AniList anime ID
+ * @param {string} category - Audio category ("sub" or "dub")
+ * @param {string} slug - Episode slug (e.g., "animepahe-1")
+ * @returns {Promise<object>} Object with download URL and metadata
+ */
+const getDownloadUrl = async (provider, anilistId, category, slug) => {
+  const sources = await getWatchSources(provider, anilistId, category, slug);
+  return {
+    download: sources.download || null,
+    provider,
+    anilistId,
+    category,
+    slug,
+    hasDownload: !!sources.download,
+  };
+};
+
+// ══════════════════════════════════════════════════════════════
+// BATCH EPISODES
+// ══════════════════════════════════════════════════════════════
+
+// ---- FEATURE: Get sources for multiple episodes at once ----
+/**
+ * Fetches streaming sources for multiple episodes in parallel.
+ * Useful for preloading next episodes or batch downloading.
+ *
+ * @param {string} provider - Provider name
+ * @param {number} anilistId - The AniList anime ID
+ * @param {string} category - Audio category ("sub" or "dub")
+ * @param {string[]} slugs - Array of episode slugs (e.g., ["animepahe-1", "animepahe-2"])
+ * @returns {Promise<object>} Object mapping slug → sources (with errors for failed ones)
+ */
+const getBatchSources = async (provider, anilistId, category, slugs) => {
+  const results = {};
+
+  const fetchOne = async (slug) => {
+    try {
+      const sources = await getWatchSources(provider, anilistId, category, slug);
+      const best = getBestStream(sources);
+      const subtitles = extractSubtitles(sources);
+      results[slug] = {
+        success: true,
+        streams: sources.streams,
+        bestStream: best,
+        subtitles,
+        download: sources.download || null,
+      };
+    } catch (err) {
+      results[slug] = {
+        success: false,
+        error: err.message,
+      };
+    }
+  };
+
+  // NOTE: Fetch up to 5 episodes in parallel to avoid rate limiting
+  const batchSize = 5;
+  for (let i = 0; i < slugs.length; i += batchSize) {
+    const batch = slugs.slice(i, i + batchSize);
+    await Promise.all(batch.map(fetchOne));
+  }
+
+  return {
+    provider,
+    anilistId,
+    category,
+    total: slugs.length,
+    successful: Object.values(results).filter((r) => r.success).length,
+    failed: Object.values(results).filter((r) => !r.success).length,
+    episodes: results,
+  };
+};
+
 module.exports = {
   getEpisodes,
   getSources,
   getWatchSources,
+  getDownloadUrl,
+  getBatchSources,
+  extractSubtitles,
+  getBestStream,
   encodePipeRequest,
   decodePipeResponse,
   translateId,

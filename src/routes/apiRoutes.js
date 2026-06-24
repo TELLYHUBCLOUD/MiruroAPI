@@ -7,7 +7,7 @@
  *   Central API router that maps all Express GET endpoints to their
  *   corresponding handler functions. Each route wraps its handler
  *   in try/catch for consistent error handling. Includes health,
- *   stats, and OpenAPI specification endpoints.
+ *   stats, streaming, and OpenAPI specification endpoints.
  *
  * @exports
  *   createApiRoutes - Function that registers all API routes
@@ -27,38 +27,24 @@ const { addCreatorInfo } = require("../middleware/creatorInfo");
 // ROUTE REGISTRATION
 // ══════════════════════════════════════════════════════════════
 
-// ---- FEATURE: Main API route registration function ----
-/**
- * Registers all API routes on the Express app.
- * Receives response helpers for consistent JSON formatting.
- *
- * @param {object} app - Express application instance
- * @param {function} jsonResponse - Standardized success response wrapper
- * @param {function} jsonError - Standardized error response wrapper
- * @returns {express.Router} Configured router
- */
-const createApiRoutes = (jsonResponse, jsonError) => {
+const createApiRoutes = (jsonResponse, jsonError, startTime) => {
   const router = express.Router();
 
   // ══════════════════════════════════════════════════════════════
   // CREATOR ATTRIBUTION (must be before all routes)
   // ══════════════════════════════════════════════════════════════
 
-  // ---- FEATURE: Creator attribution middleware — injects author info into every response ----
   router.use(addCreatorInfo);
 
   // ══════════════════════════════════════════════════════════════
-  // REQUEST COUNTER (must be before all routes)
+  // REQUEST COUNTER
   // ══════════════════════════════════════════════════════════════
 
-  const startTime = Date.now();
-  let requestCount = 0;
-  let errorCount = 0;
-
+  const requestCount = { total: 0, errors: 0 };
   router.use((req, res, next) => {
-    requestCount++;
+    requestCount.total++;
     res.on("finish", () => {
-      if (res.statusCode >= 400) errorCount++;
+      if (res.statusCode >= 400) requestCount.errors++;
     });
     next();
   });
@@ -96,7 +82,6 @@ const createApiRoutes = (jsonResponse, jsonError) => {
       let result = getCached(cacheKey);
       if (!result) {
         result = await anilist.getSuggestions(query);
-        // NOTE: Cache suggestions longer (2 minutes) — they change less frequently
         setCache(cacheKey, result, 120 * 1000);
       }
 
@@ -128,6 +113,30 @@ const createApiRoutes = (jsonResponse, jsonError) => {
     }
   });
 
+  // ---- FEATURE: Multi-parameter search (query + filters combined) ----
+  router.get("/multi-search", async (req, res) => {
+    try {
+      const { q, genre, tag, year, season, format, status, sort = "SEARCH_MATCH", page = 1, per_page = 20 } = req.query;
+
+      // NOTE: If only query is provided, use regular search
+      if (q && !genre && !tag && !year && !season && !format && !status) {
+        const result = await anilist.searchAnime(q, parseInt(page), parseInt(per_page));
+        return jsonResponse(res, result);
+      }
+
+      // NOTE: If filters only, use filter endpoint
+      const result = await anilist.filterAnime({
+        genre, tag, year: year ? parseInt(year) : null,
+        season, format, status, sort,
+        page: parseInt(page), perPage: parseInt(per_page),
+      });
+
+      jsonResponse(res, result);
+    } catch (err) {
+      jsonError(res, err.message);
+    }
+  });
+
   // ══════════════════════════════════════════════════════════════
   // COLLECTIONS
   // ══════════════════════════════════════════════════════════════
@@ -141,7 +150,42 @@ const createApiRoutes = (jsonResponse, jsonError) => {
       let result = getCached(cacheKey);
       if (!result) {
         result = await anilist.getCollection("TRENDING_DESC", null, parseInt(page), parseInt(per_page));
-        // NOTE: Cache trending for 2 minutes — changes less frequently than search
+        setCache(cacheKey, result, 120 * 1000);
+      }
+
+      jsonResponse(res, result);
+    } catch (err) {
+      jsonError(res, err.message);
+    }
+  });
+
+  // ---- FEATURE: Daily trending anime ----
+  router.get("/trending/daily", async (req, res) => {
+    try {
+      const { page = 1, per_page = 20 } = req.query;
+      const cacheKey = `trending:daily:${page}:${per_page}`;
+
+      let result = getCached(cacheKey);
+      if (!result) {
+        result = await anilist.getTrendingDaily(parseInt(page), parseInt(per_page));
+        setCache(cacheKey, result, 120 * 1000);
+      }
+
+      jsonResponse(res, result);
+    } catch (err) {
+      jsonError(res, err.message);
+    }
+  });
+
+  // ---- FEATURE: Weekly trending anime ----
+  router.get("/trending/weekly", async (req, res) => {
+    try {
+      const { page = 1, per_page = 20 } = req.query;
+      const cacheKey = `trending:weekly:${page}:${per_page}`;
+
+      let result = getCached(cacheKey);
+      if (!result) {
+        result = await anilist.getTrendingWeekly(parseInt(page), parseInt(per_page));
         setCache(cacheKey, result, 120 * 1000);
       }
 
@@ -161,6 +205,24 @@ const createApiRoutes = (jsonResponse, jsonError) => {
       if (!result) {
         result = await anilist.getCollection("POPULARITY_DESC", null, parseInt(page), parseInt(per_page));
         setCache(cacheKey, result, 120 * 1000);
+      }
+
+      jsonResponse(res, result);
+    } catch (err) {
+      jsonError(res, err.message);
+    }
+  });
+
+  // ---- FEATURE: Top anime by score (all time) ----
+  router.get("/top", async (req, res) => {
+    try {
+      const { page = 1, per_page = 20 } = req.query;
+      const cacheKey = `top:${page}:${per_page}`;
+
+      let result = getCached(cacheKey);
+      if (!result) {
+        result = await anilist.getTopAnime(parseInt(page), parseInt(per_page));
+        setCache(cacheKey, result, 300 * 1000);
       }
 
       jsonResponse(res, result);
@@ -239,6 +301,259 @@ const createApiRoutes = (jsonResponse, jsonError) => {
     }
   });
 
+  // ---- FEATURE: Next 10 episodes airing soon ----
+  router.get("/upcoming/countdown", async (req, res) => {
+    try {
+      const cacheKey = "upcoming:countdown";
+      let result = getCached(cacheKey);
+      if (!result) {
+        result = await anilist.getSchedule(1, 10);
+        setCache(cacheKey, result, 60 * 1000);
+      }
+
+      jsonResponse(res, result);
+    } catch (err) {
+      jsonError(res, err.message);
+    }
+  });
+
+  // ---- FEATURE: Random anime of the day ----
+  router.get("/random", async (req, res) => {
+    try {
+      // NOTE: Get random page from trending to ensure variety
+      const randomPage = Math.floor(Math.random() * 50) + 1;
+      const data = await anilist.getCollection("POPULARITY_DESC", null, randomPage, 1);
+      const anime = data.results[0];
+
+      if (!anime) return jsonError(res, "No anime found", 404);
+      jsonResponse(res, anime);
+    } catch (err) {
+      jsonError(res, err.message);
+    }
+  });
+
+  // ══════════════════════════════════════════════════════════════
+  // SEASONAL & STUDIO
+  // ══════════════════════════════════════════════════════════════
+
+  // ---- FEATURE: Seasonal anime by year and season ----
+  router.get("/season/:year/:season", async (req, res) => {
+    try {
+      const { year, season } = req.params;
+      const { page = 1, per_page = 20 } = req.query;
+      const cacheKey = `season:${year}:${season}:${page}:${per_page}`;
+
+      let result = getCached(cacheKey);
+      if (!result) {
+        result = await anilist.getSeasonalAnime(parseInt(year), season, parseInt(page), parseInt(per_page));
+        setCache(cacheKey, result, 300 * 1000);
+      }
+
+      jsonResponse(res, result);
+    } catch (err) {
+      jsonError(res, err.message);
+    }
+  });
+
+  // ---- FEATURE: Anime by studio name ----
+  router.get("/studio/:name", async (req, res) => {
+    try {
+      const { name } = req.params;
+      const { page = 1, per_page = 20 } = req.query;
+      const cacheKey = `studio:${name}:${page}:${per_page}`;
+
+      let result = getCached(cacheKey);
+      if (!result) {
+        result = await anilist.getAnimeByStudio(decodeURIComponent(name), parseInt(page), parseInt(per_page));
+        setCache(cacheKey, result, 300 * 1000);
+      }
+
+      jsonResponse(res, result);
+    } catch (err) {
+      jsonError(res, err.message);
+    }
+  });
+
+  // ══════════════════════════════════════════════════════════════
+  // GENRES & TAGS
+  // ══════════════════════════════════════════════════════════════
+
+  // ---- FEATURE: Get all available genres ----
+  router.get("/genres", async (req, res) => {
+    try {
+      const cacheKey = "genres";
+      let result = getCached(cacheKey);
+      if (!result) {
+        result = await anilist.getAllGenres();
+        setCache(cacheKey, result, 86400 * 1000);
+      }
+
+      jsonResponse(res, result);
+    } catch (err) {
+      jsonError(res, err.message);
+    }
+  });
+
+  // ---- FEATURE: Get all available tags ----
+  router.get("/tags", async (req, res) => {
+    try {
+      const cacheKey = "tags";
+      let result = getCached(cacheKey);
+      if (!result) {
+        result = await anilist.getAllTags();
+        setCache(cacheKey, result, 86400 * 1000);
+      }
+
+      jsonResponse(res, result);
+    } catch (err) {
+      jsonError(res, err.message);
+    }
+  });
+
+  // ---- FEATURE: Anime by genre name ----
+  router.get("/genre/:name", async (req, res) => {
+    try {
+      const { name } = req.params;
+      const { page = 1, per_page = 20 } = req.query;
+      const cacheKey = `genre:${name}:${page}:${per_page}`;
+
+      let result = getCached(cacheKey);
+      if (!result) {
+        result = await anilist.filterAnime({ genre: decodeURIComponent(name), page: parseInt(page), perPage: parseInt(per_page) });
+        setCache(cacheKey, result, 120 * 1000);
+      }
+
+      jsonResponse(res, result);
+    } catch (err) {
+      jsonError(res, err.message);
+    }
+  });
+
+  // ---- FEATURE: Anime by year ----
+  router.get("/year/:year", async (req, res) => {
+    try {
+      const { year } = req.params;
+      const { page = 1, per_page = 20 } = req.query;
+      const cacheKey = `year:${year}:${page}:${per_page}`;
+
+      let result = getCached(cacheKey);
+      if (!result) {
+        result = await anilist.filterAnime({ year: parseInt(year), page: parseInt(page), perPage: parseInt(per_page) });
+        setCache(cacheKey, result, 300 * 1000);
+      }
+
+      jsonResponse(res, result);
+    } catch (err) {
+      jsonError(res, err.message);
+    }
+  });
+
+  // ---- FEATURE: Anime by status ----
+  router.get("/status/:status", async (req, res) => {
+    try {
+      const { status } = req.params;
+      const { page = 1, per_page = 20 } = req.query;
+      const cacheKey = `status:${status}:${page}:${per_page}`;
+
+      let result = getCached(cacheKey);
+      if (!result) {
+        result = await anilist.filterAnime({ status, page: parseInt(page), perPage: parseInt(per_page) });
+        setCache(cacheKey, result, 120 * 1000);
+      }
+
+      jsonResponse(res, result);
+    } catch (err) {
+      jsonError(res, err.message);
+    }
+  });
+
+  // ---- FEATURE: Anime by format ----
+  router.get("/format/:format", async (req, res) => {
+    try {
+      const { format } = req.params;
+      const { page = 1, per_page = 20 } = req.query;
+      const cacheKey = `format:${format}:${page}:${per_page}`;
+
+      let result = getCached(cacheKey);
+      if (!result) {
+        result = await anilist.filterAnime({ format, page: parseInt(page), perPage: parseInt(per_page) });
+        setCache(cacheKey, result, 300 * 1000);
+      }
+
+      jsonResponse(res, result);
+    } catch (err) {
+      jsonError(res, err.message);
+    }
+  });
+
+  // ══════════════════════════════════════════════════════════════
+  // CHARACTER & STAFF
+  // ══════════════════════════════════════════════════════════════
+
+  // ---- FEATURE: Character detail with anime list ----
+  router.get("/character/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return jsonError(res, "Invalid character ID", 400);
+
+      const cacheKey = `character:${id}`;
+      let result = getCached(cacheKey);
+      if (!result) {
+        result = await anilist.getCharacterInfo(id);
+        setCache(cacheKey, result, 600 * 1000);
+      }
+
+      jsonResponse(res, result);
+    } catch (err) {
+      jsonError(res, err.message);
+    }
+  });
+
+  // ---- FEATURE: Staff detail with anime list ----
+  router.get("/staff/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return jsonError(res, "Invalid staff ID", 400);
+
+      const cacheKey = `staff:${id}`;
+      let result = getCached(cacheKey);
+      if (!result) {
+        result = await anilist.getStaffInfo(id);
+        setCache(cacheKey, result, 600 * 1000);
+      }
+
+      jsonResponse(res, result);
+    } catch (err) {
+      jsonError(res, err.message);
+    }
+  });
+
+  // ---- FEATURE: Search characters ----
+  router.get("/characters", async (req, res) => {
+    try {
+      const { query, page = 1, per_page = 20 } = req.query;
+      if (!query) return jsonError(res, "query parameter is required", 400);
+
+      const result = await anilist.searchCharacters(query, parseInt(page), parseInt(per_page));
+      jsonResponse(res, result);
+    } catch (err) {
+      jsonError(res, err.message);
+    }
+  });
+
+  // ---- FEATURE: Search staff ----
+  router.get("/staff", async (req, res) => {
+    try {
+      const { query, page = 1, per_page = 20 } = req.query;
+      if (!query) return jsonError(res, "query parameter is required", 400);
+
+      const result = await anilist.searchStaff(query, parseInt(page), parseInt(per_page));
+      jsonResponse(res, result);
+    } catch (err) {
+      jsonError(res, err.message);
+    }
+  });
+
   // ══════════════════════════════════════════════════════════════
   // ANIME DETAILS
   // ══════════════════════════════════════════════════════════════
@@ -253,7 +568,6 @@ const createApiRoutes = (jsonResponse, jsonError) => {
       let result = getCached(cacheKey);
       if (!result) {
         result = await anilist.getAnimeInfo(id);
-        // NOTE: Cache info for 5 minutes — detailed data changes infrequently
         setCache(cacheKey, result, 300 * 1000);
       }
 
@@ -299,7 +613,7 @@ const createApiRoutes = (jsonResponse, jsonError) => {
   });
 
   // ══════════════════════════════════════════════════════════════
-  // STREAMING
+  // STREAMING & DOWNLOADING
   // ══════════════════════════════════════════════════════════════
 
   // ---- FEATURE: Episode list from all providers ----
@@ -312,10 +626,26 @@ const createApiRoutes = (jsonResponse, jsonError) => {
       let result = getCached(cacheKey);
       if (!result) {
         result = await pipe.getEpisodes(id);
-        // NOTE: Cache episodes for 2 minutes — episode lists change during airing
         setCache(cacheKey, result, 120 * 1000);
       }
 
+      jsonResponse(res, result);
+    } catch (err) {
+      jsonError(res, err.message);
+    }
+  });
+
+  // ---- FEATURE: Batch episode sources ----
+  router.get("/episodes/:id/batch", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { provider = "kiwi", category = "sub", slugs } = req.query;
+
+      if (isNaN(id)) return jsonError(res, "Invalid AniList ID", 400);
+      if (!slugs) return jsonError(res, "slugs parameter is required (comma-separated)", 400);
+
+      const slugList = slugs.split(",").map((s) => s.trim());
+      const result = await pipe.getBatchSources(provider, id, category, slugList);
       jsonResponse(res, result);
     } catch (err) {
       jsonError(res, err.message);
@@ -337,11 +667,236 @@ const createApiRoutes = (jsonResponse, jsonError) => {
     }
   });
 
+  // ---- FEATURE: Streaming sources with quality fallback ----
+  router.get("/stream", async (req, res) => {
+    try {
+      const { provider, anilistId, category = "sub", slug, quality = "1080p" } = req.query;
+      if (!provider || !anilistId || !slug) {
+        return jsonError(res, "provider, anilistId, and slug are required", 400);
+      }
+
+      const sources = await pipe.getWatchSources(provider, parseInt(anilistId), category, slug);
+      const bestStream = pipe.getBestStream(sources, quality);
+      const subtitles = pipe.extractSubtitles(sources);
+
+      jsonResponse(res, {
+        ...sources,
+        bestStream,
+        subtitles,
+      });
+    } catch (err) {
+      jsonError(res, err.message);
+    }
+  });
+
+  // ---- FEATURE: Download URL for an episode ----
+  router.get("/download", async (req, res) => {
+    try {
+      const { provider, anilistId, category = "sub", slug } = req.query;
+      if (!provider || !anilistId || !slug) {
+        return jsonError(res, "provider, anilistId, and slug are required", 400);
+      }
+
+      const result = await pipe.getDownloadUrl(provider, parseInt(anilistId), category, slug);
+      jsonResponse(res, result);
+    } catch (err) {
+      jsonError(res, err.message);
+    }
+  });
+
   // ---- FEATURE: Streaming sources (simple slug-based endpoint) ----
   router.get("/watch/:provider/:anilistId/:category/:slug", async (req, res) => {
     try {
       const { provider, anilistId, category, slug } = req.params;
       const result = await pipe.getWatchSources(provider, parseInt(anilistId), category, slug);
+      jsonResponse(res, result);
+    } catch (err) {
+      jsonError(res, err.message);
+    }
+  });
+
+  // ══════════════════════════════════════════════════════════════
+  // UTILITY FEATURES
+  // ══════════════════════════════════════════════════════════════
+
+  // ---- FEATURE: Compare two anime side by side ----
+  router.get("/compare/:id1/:id2", async (req, res) => {
+    try {
+      const id1 = parseInt(req.params.id1);
+      const id2 = parseInt(req.params.id2);
+      if (isNaN(id1) || isNaN(id2)) return jsonError(res, "Invalid anime IDs", 400);
+
+      const cacheKey = `compare:${id1}:${id2}`;
+      let result = getCached(cacheKey);
+      if (!result) {
+        const [anime1, anime2] = await Promise.all([
+          anilist.getAnimeInfo(id1),
+          anilist.getAnimeInfo(id2),
+        ]);
+
+        result = {
+          anime1: {
+            id: anime1.id,
+            title: anime1.title,
+            coverImage: anime1.coverImage,
+            format: anime1.format,
+            episodes: anime1.episodes,
+            duration: anime1.duration,
+            status: anime1.status,
+            averageScore: anime1.averageScore,
+            meanScore: anime1.meanScore,
+            popularity: anime1.popularity,
+            favourites: anime1.favourites,
+            genres: anime1.genres,
+            studios: anime1.studios,
+          },
+          anime2: {
+            id: anime2.id,
+            title: anime2.title,
+            coverImage: anime2.coverImage,
+            format: anime2.format,
+            episodes: anime2.episodes,
+            duration: anime2.duration,
+            status: anime2.status,
+            averageScore: anime2.averageScore,
+            meanScore: anime2.meanScore,
+            popularity: anime2.popularity,
+            favourites: anime2.favourites,
+            genres: anime2.genres,
+            studios: anime2.studios,
+          },
+        };
+
+        setCache(cacheKey, result, 600 * 1000);
+      }
+
+      jsonResponse(res, result);
+    } catch (err) {
+      jsonError(res, err.message);
+    }
+  });
+
+  // ---- FEATURE: Genre statistics ----
+  router.get("/stats/genre", async (req, res) => {
+    try {
+      const cacheKey = "stats:genre";
+      let result = getCached(cacheKey);
+      if (!result) {
+        const genres = await anilist.getAllGenres();
+        const stats = {};
+
+        // NOTE: Fetch top anime for each genre (limited to avoid rate limiting)
+        for (const genre of genres.slice(0, 10)) {
+          try {
+            const data = await anilist.filterAnime({ genre, perPage: 1 });
+            stats[genre] = {
+              total: data.total,
+              topAnime: data.results[0] || null,
+            };
+          } catch {
+            stats[genre] = { total: 0, topAnime: null };
+          }
+        }
+
+        result = { genres, stats };
+        setCache(cacheKey, result, 86400 * 1000);
+      }
+
+      jsonResponse(res, result);
+    } catch (err) {
+      jsonError(res, err.message);
+    }
+  });
+
+  // ---- FEATURE: Monthly airing calendar ----
+  router.get("/calendar", async (req, res) => {
+    try {
+      const { year, month } = req.query;
+      const now = new Date();
+      const y = year ? parseInt(year) : now.getFullYear();
+      const m = month ? parseInt(month) : now.getMonth() + 1;
+
+      const cacheKey = `calendar:${y}:${m}`;
+      let result = getCached(cacheKey);
+      if (!result) {
+        // NOTE: Get airing schedule for the month
+        const schedule = await anilist.getSchedule(1, 50);
+        const monthStart = new Date(y, m - 1, 1);
+        const monthEnd = new Date(y, m, 0, 23, 59, 59);
+
+        const monthAnime = schedule.results.filter((item) => {
+          const airDate = new Date(item.airingAt * 1000);
+          return airDate >= monthStart && airDate <= monthEnd;
+        });
+
+        // NOTE: Group by date
+        const calendar = {};
+        monthAnime.forEach((item) => {
+          const date = new Date(item.airingAt * 1000).toISOString().split("T")[0];
+          if (!calendar[date]) calendar[date] = [];
+          calendar[date].push({
+            id: item.id,
+            title: item.title,
+            coverImage: item.coverImage,
+            episode: item.next_episode,
+            airingAt: item.airingAt,
+          });
+        });
+
+        result = {
+          year: y,
+          month: m,
+          totalAiring: monthAnime.length,
+          calendar,
+        };
+        setCache(cacheKey, result, 3600 * 1000);
+      }
+
+      jsonResponse(res, result);
+    } catch (err) {
+      jsonError(res, err.message);
+    }
+  });
+
+  // ---- FEATURE: Anime timeline (release history) ----
+  router.get("/timeline/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return jsonError(res, "Invalid AniList ID", 400);
+
+      const cacheKey = `timeline:${id}`;
+      let result = getCached(cacheKey);
+      if (!result) {
+        const info = await anilist.getAnimeInfo(id);
+        const relations = await anilist.getAnimeRelations(id);
+
+        // NOTE: Build timeline from relations
+        const timeline = relations.relations
+          .filter((r) => ["PREQUEL", "SEQUEL", "SIDE_STORY", "SPIN_OFF", "ADAPTATION", "SOURCE"].includes(r.relationType))
+          .map((r) => ({
+            id: r.node.id,
+            title: r.node.title,
+            coverImage: r.node.coverImage,
+            format: r.node.format,
+            status: r.node.status,
+            episodes: r.node.episodes,
+            meanScore: r.node.meanScore,
+            relation: r.relationType,
+          }));
+
+        result = {
+          id: info.id,
+          title: info.title,
+          startDate: info.startDate,
+          endDate: info.endDate,
+          status: info.status,
+          episodes: info.episodes,
+          timeline,
+        };
+
+        setCache(cacheKey, result, 600 * 1000);
+      }
+
       jsonResponse(res, result);
     } catch (err) {
       jsonError(res, err.message);
@@ -363,7 +918,7 @@ const createApiRoutes = (jsonResponse, jsonError) => {
       success: true,
       results: {
         status: "healthy",
-        version: "1.4.0",
+        version: "2.0.0",
         uptime: `${hours}h ${minutes}m ${seconds}s`,
         uptimeSeconds: uptime,
         timestamp: new Date().toISOString(),
@@ -371,8 +926,13 @@ const createApiRoutes = (jsonResponse, jsonError) => {
         memory: {
           used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + "MB",
           total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024) + "MB",
+          rss: Math.round(process.memoryUsage().rss / 1024 / 1024) + "MB",
         },
-        endpoints: 16,
+        cache: {
+          size: require("../helpers/cache").getCacheSize(),
+          maxSize: 100,
+        },
+        endpoints: 35,
         providers: ["kiwi", "pewe", "bee", "bonk", "bun", "ally", "nun", "twin", "cog", "moo", "hop", "telli"],
       },
     });
@@ -387,19 +947,20 @@ const createApiRoutes = (jsonResponse, jsonError) => {
       results: {
         uptime: uptime + "s",
         requests: {
-          total: requestCount,
-          errors: errorCount,
-          successRate: requestCount > 0
-            ? ((1 - errorCount / requestCount) * 100).toFixed(1) + "%"
+          total: requestCount.total,
+          errors: requestCount.errors,
+          successRate: requestCount.total > 0
+            ? ((1 - requestCount.errors / requestCount.total) * 100).toFixed(1) + "%"
             : "100%",
         },
         cache: {
           type: "in-memory",
-          ttl: "1 minute (default), 2-5 minutes for collections",
+          ttl: "1 minute (default), 2-5 minutes for collections, 24 hours for genres/tags",
           maxSize: 100,
+          currentSize: require("../helpers/cache").getCacheSize(),
           description: "Map-based cache with TTL expiration and FIFO eviction",
         },
-        endpoints: 16,
+        endpoints: 35,
         timestamp: new Date().toISOString(),
       },
     });
@@ -412,7 +973,7 @@ const createApiRoutes = (jsonResponse, jsonError) => {
       info: {
         title: "MiruroAPI",
         description: "Free REST API for anime streaming data — AniList GraphQL + Miruro streaming providers",
-        version: "1.4.0",
+        version: "2.0.0",
         contact: { name: "Shineii86", url: "https://github.com/Shineii86/MiruroAPI" },
       },
       servers: [
@@ -422,28 +983,56 @@ const createApiRoutes = (jsonResponse, jsonError) => {
         "/search": { get: { summary: "Search anime", tags: ["Search"] } },
         "/suggestions": { get: { summary: "Autocomplete suggestions", tags: ["Search"] } },
         "/filter": { get: { summary: "Advanced filter", tags: ["Search"] } },
+        "/multi-search": { get: { summary: "Multi-parameter search", tags: ["Search"] } },
         "/trending": { get: { summary: "Trending anime", tags: ["Collections"] } },
+        "/trending/daily": { get: { summary: "Daily trending", tags: ["Collections"] } },
+        "/trending/weekly": { get: { summary: "Weekly trending", tags: ["Collections"] } },
         "/popular": { get: { summary: "Most popular", tags: ["Collections"] } },
+        "/top": { get: { summary: "Top by score", tags: ["Collections"] } },
         "/upcoming": { get: { summary: "Upcoming anime", tags: ["Collections"] } },
         "/recent": { get: { summary: "Recently aired", tags: ["Collections"] } },
         "/spotlight": { get: { summary: "Spotlight anime", tags: ["Collections"] } },
         "/schedule": { get: { summary: "Airing schedule", tags: ["Collections"] } },
+        "/random": { get: { summary: "Random anime", tags: ["Collections"] } },
+        "/season/{year}/{season}": { get: { summary: "Seasonal anime", tags: ["Seasonal & Studio"] } },
+        "/studio/{name}": { get: { summary: "Anime by studio", tags: ["Seasonal & Studio"] } },
+        "/genres": { get: { summary: "All genres", tags: ["Genres & Tags"] } },
+        "/tags": { get: { summary: "All tags", tags: ["Genres & Tags"] } },
+        "/genre/{name}": { get: { summary: "Anime by genre", tags: ["Genres & Tags"] } },
+        "/year/{year}": { get: { summary: "Anime by year", tags: ["Genres & Tags"] } },
+        "/status/{status}": { get: { summary: "Anime by status", tags: ["Genres & Tags"] } },
+        "/format/{format}": { get: { summary: "Anime by format", tags: ["Genres & Tags"] } },
+        "/character/{id}": { get: { summary: "Character detail", tags: ["Character & Staff"] } },
+        "/staff/{id}": { get: { summary: "Staff detail", tags: ["Character & Staff"] } },
+        "/characters": { get: { summary: "Search characters", tags: ["Character & Staff"] } },
+        "/staff": { get: { summary: "Search staff", tags: ["Character & Staff"] } },
         "/info/{id}": { get: { summary: "Full anime info", tags: ["Anime Details"] } },
         "/anime/{id}/characters": { get: { summary: "Characters", tags: ["Anime Details"] } },
         "/anime/{id}/relations": { get: { summary: "Relations", tags: ["Anime Details"] } },
         "/anime/{id}/recommendations": { get: { summary: "Recommendations", tags: ["Anime Details"] } },
-        "/episodes/{id}": { get: { summary: "Episode list", tags: ["Streaming"] } },
-        "/sources": { get: { summary: "Streaming sources (detailed)", tags: ["Streaming"] } },
-        "/watch/{provider}/{anilistId}/{category}/{slug}": { get: { summary: "Streaming sources (simple)", tags: ["Streaming"] } },
+        "/episodes/{id}": { get: { summary: "Episode list", tags: ["Streaming & Downloading"] } },
+        "/episodes/{id}/batch": { get: { summary: "Batch episode sources", tags: ["Streaming & Downloading"] } },
+        "/sources": { get: { summary: "Streaming sources (detailed)", tags: ["Streaming & Downloading"] } },
+        "/stream": { get: { summary: "Stream with quality fallback", tags: ["Streaming & Downloading"] } },
+        "/download": { get: { summary: "Download URL", tags: ["Streaming & Downloading"] } },
+        "/watch/{provider}/{anilistId}/{category}/{slug}": { get: { summary: "Streaming sources (simple)", tags: ["Streaming & Downloading"] } },
+        "/compare/{id1}/{id2}": { get: { summary: "Compare two anime", tags: ["Utility"] } },
+        "/stats/genre": { get: { summary: "Genre statistics", tags: ["Utility"] } },
+        "/calendar": { get: { summary: "Monthly calendar", tags: ["Utility"] } },
+        "/timeline/{id}": { get: { summary: "Anime timeline", tags: ["Utility"] } },
         "/health": { get: { summary: "Health check", tags: ["System"] } },
         "/stats": { get: { summary: "API statistics", tags: ["System"] } },
         "/openapi": { get: { summary: "OpenAPI spec", tags: ["System"] } },
       },
       tags: [
-        { name: "Search", description: "Search & filter" },
-        { name: "Collections", description: "Trending, popular, upcoming, schedule" },
+        { name: "Search", description: "Search, filter, suggestions" },
+        { name: "Collections", description: "Trending, popular, top, schedule" },
+        { name: "Seasonal & Studio", description: "Seasonal anime, studio filter" },
+        { name: "Genres & Tags", description: "Genre, year, status, format filters" },
+        { name: "Character & Staff", description: "Character/staff details and search" },
         { name: "Anime Details", description: "Info, characters, relations, recommendations" },
-        { name: "Streaming", description: "Episodes, sources, watch" },
+        { name: "Streaming & Downloading", description: "Episodes, sources, stream, download" },
+        { name: "Utility", description: "Compare, stats, calendar, timeline" },
         { name: "System", description: "Health, stats, OpenAPI" },
       ],
     });
