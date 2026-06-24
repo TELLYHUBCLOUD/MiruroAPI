@@ -19,8 +19,8 @@
   <img src="https://img.shields.io/badge/AniList-GraphQL-02A6E4?style=flat-square&logo=graphql&logoColor=white" alt="AniList GraphQL"/>
   <img src="https://img.shields.io/badge/Vercel-Serverless-000000?style=flat-square&logo=vercel&logoColor=white" alt="Vercel"/>
   <img src="https://img.shields.io/badge/License-MIT-22c55e?style=flat-square&logo=mit&logoColor=white" alt="License"/>
-  <img src="https://img.shields.io/badge/Version-2.0.1-f43f8e?style=flat-square&logoColor=white" alt="Version"/>
-  <img src="https://img.shields.io/badge/Endpoints-35-6366f1?style=flat-square&logoColor=white" alt="Endpoints"/>
+  <img src="https://img.shields.io/badge/Version-2.1.0-f43f8e?style=flat-square&logoColor=white" alt="Version"/>
+  <img src="https://img.shields.io/badge/Endpoints-36-6366f1?style=flat-square&logoColor=white" alt="Endpoints"/>
   <img src="https://img.shields.io/badge/Providers-12-a855f7?style=flat-square&logoColor=white" alt="Providers"/>
 </p>
 

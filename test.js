@@ -4,8 +4,8 @@
  * Repository: https://github.com/Shineii86/MiruroAPI
  *
  * @description
- *   Integration test suite for MiruroAPI v2.0.1 endpoints.
- *   Tests all 35 endpoints for correct response format.
+ *   Integration test suite for MiruroAPI v2.1.0 endpoints.
+ *   Tests all 36 endpoints for correct response format.
  *
  * @author  Shinei Nouzen
  * @license MIT
@@ -19,6 +19,7 @@ const tests = [
   { name: "Health", url: "/health" },
   { name: "Stats", url: "/stats" },
   { name: "OpenAPI", url: "/openapi" },
+  { name: "Providers", url: "/providers" },
 
   // Search & Discovery
   { name: "Search", url: "/search?query=naruto" },
@@ -103,7 +104,7 @@ async function runTest(test) {
 }
 
 async function runAll() {
-  console.log(`\n🧪 MiruroAPI v2.0.1 — Running ${tests.length} tests...\n`);
+  console.log(`\n🧪 MiruroAPI v2.1.0 — Running ${tests.length} tests...\n`);
 
   for (const test of tests) {
     await runTest(test);

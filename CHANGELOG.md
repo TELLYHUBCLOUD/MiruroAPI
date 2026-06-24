@@ -1,5 +1,43 @@
 # Changelog
 
+## v2.1.0
+### Major Feature Update — Provider capabilities, enriched metadata, skip times
+
+#### New Endpoints
+- GET /api/providers — Provider capabilities and configuration (12 providers with full metadata)
+
+#### Anime Info Enrichment
+- Added `alternateName` — multiple language titles from synonyms
+- Added `aggregateRating` — rating with count, mean score
+- Added `sameAs` — external links (AniList, MAL, official sites)
+- Added `externalLinks` — structured external links with site/type
+- Added `productionCompany` — non-animation studios
+- Added `animationStudio` — animation studios
+- Added `trailer` — anime trailer info
+- Added `nextAiringEpisode` — next episode air time
+- Added `tags` — simplified tag names array
+
+#### Streaming Improvements
+- Added `extractSkipTimes` — extract OP/ED skip timestamps from sources
+- Added `skipTimes` field to /stream and /watch responses
+- Episode thumbnails already included in pipe response
+
+#### Provider Capabilities (from miruro.tv __SSR_CONFIG__)
+- kiwi: sub, download
+- pewe: sub
+- bonk: sub, ssub, download, skip_times
+- bee: ssub
+- ally: sub, download, thumbnails
+- moo: sub, download
+- hop: ssub, thumbnails
+- nun: sub (embed of ally)
+- bun: ssub (embed of bee)
+- twin: sub, ssub (embed of bonk)
+- cog: sub (embed of moo)
+- telli: sub (embed of kiwi, hidden)
+
+---
+
 ## v2.0.1
 ### Streaming Improvements — Better subtitle extraction, quality fallback
 

@@ -352,6 +352,25 @@ const extractSubtitles = (sources) => {
   })).filter((sub) => sub.url);
 };
 
+// ---- FEATURE: Extract skip timestamps (OP/ED) from sources ----
+/**
+ * Extracts skip timestamps (OP/ED) from the pipe sources response.
+ * Only available for providers with skip_times capability (e.g., bonk).
+ *
+ * @param {object} sources - The sources response from getSources/getWatchSources
+ * @returns {object|null} Skip timestamps object or null
+ */
+const extractSkipTimes = (sources) => {
+  const skipTimes = sources.skipTimes || sources.skip || null;
+  if (!skipTimes || typeof skipTimes !== "object") return null;
+
+  return {
+    intro: skipTimes.intro || skipTimes.op || null,
+    outro: skipTimes.outro || skipTimes.ed || null,
+    preview: skipTimes.preview || null,
+  };
+};
+
 // ══════════════════════════════════════════════════════════════
 // QUALITY FALLBACK
 // ══════════════════════════════════════════════════════════════
@@ -485,6 +504,7 @@ module.exports = {
   getDownloadUrl,
   getBatchSources,
   extractSubtitles,
+  extractSkipTimes,
   getBestStream,
   encodePipeRequest,
   decodePipeResponse,

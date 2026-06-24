@@ -559,6 +559,7 @@ const createApiRoutes = (jsonResponse, jsonError, startTime) => {
   // ══════════════════════════════════════════════════════════════
 
   // ---- FEATURE: Complete anime info by AniList ID ----
+  // ---- FEATURE: Full anime info with metadata enrichment ----
   router.get("/info/:id", async (req, res) => {
     try {
       const id = parseInt(req.params.id);
@@ -571,7 +572,35 @@ const createApiRoutes = (jsonResponse, jsonError, startTime) => {
         setCache(cacheKey, result, 300 * 1000);
       }
 
-      jsonResponse(res, result);
+      // NOTE: Enrich with miruro-style metadata fields
+      const enriched = {
+        ...result,
+        alternateName: result.synonyms || [],
+        aggregateRating: result.averageScore ? {
+          ratingValue: result.averageScore,
+          bestRating: 100,
+          ratingCount: result.favourites || 0,
+          meanScore: result.meanScore || null,
+        } : null,
+        sameAs: (result.externalLinks || []).map((l) => l.url),
+        externalLinks: (result.externalLinks || []).map((l) => ({
+          url: l.url,
+          site: l.site,
+          type: l.type,
+        })),
+        productionCompany: (result.studios?.nodes || [])
+          .filter((s) => !s.isAnimationStudio)
+          .map((s) => ({ name: s.name, siteUrl: s.siteUrl })),
+        animationStudio: (result.studios?.nodes || [])
+          .filter((s) => s.isAnimationStudio)
+          .map((s) => ({ name: s.name, siteUrl: s.siteUrl })),
+        streamingEpisodes: result.streamingEpisodes || [],
+        trailer: result.trailer || null,
+        nextAiringEpisode: result.nextAiringEpisode || null,
+        tags: (result.tags || []).map((t) => t.name),
+      };
+
+      jsonResponse(res, enriched);
     } catch (err) {
       jsonError(res, err.message);
     }
@@ -668,6 +697,7 @@ const createApiRoutes = (jsonResponse, jsonError, startTime) => {
   });
 
   // ---- FEATURE: Streaming sources with quality fallback ----
+  // ---- FEATURE: Stream with quality fallback, subtitles, and skip times ----
   router.get("/stream", async (req, res) => {
     try {
       const { provider, anilistId, category = "sub", slug, quality = "1080p" } = req.query;
@@ -678,11 +708,13 @@ const createApiRoutes = (jsonResponse, jsonError, startTime) => {
       const sources = await pipe.getWatchSources(provider, parseInt(anilistId), category, slug);
       const bestStream = pipe.getBestStream(sources, quality);
       const subtitles = pipe.extractSubtitles(sources);
+      const skipTimes = pipe.extractSkipTimes(sources);
 
       jsonResponse(res, {
         ...sources,
         bestStream,
         subtitles,
+        skipTimes,
       });
     } catch (err) {
       jsonError(res, err.message);
@@ -708,8 +740,15 @@ const createApiRoutes = (jsonResponse, jsonError, startTime) => {
   router.get("/watch/:provider/:anilistId/:category/:slug", async (req, res) => {
     try {
       const { provider, anilistId, category, slug } = req.params;
-      const result = await pipe.getWatchSources(provider, parseInt(anilistId), category, slug);
-      jsonResponse(res, result);
+      const sources = await pipe.getWatchSources(provider, parseInt(anilistId), category, slug);
+      const subtitles = pipe.extractSubtitles(sources);
+      const skipTimes = pipe.extractSkipTimes(sources);
+
+      jsonResponse(res, {
+        ...sources,
+        subtitles,
+        skipTimes,
+      });
     } catch (err) {
       jsonError(res, err.message);
     }
@@ -907,6 +946,151 @@ const createApiRoutes = (jsonResponse, jsonError, startTime) => {
   // HEALTH & STATS
   // ══════════════════════════════════════════════════════════════
 
+  // ---- FEATURE: Provider capabilities and configuration ----
+  router.get("/providers", (req, res) => {
+    const providers = {
+      kiwi: {
+        name: "kiwi",
+        visible: true,
+        player: "native",
+        parent: null,
+        relationship: null,
+        capabilities: { sub: true, ssub: false, download: true, skip_times: false, thumbnails: false },
+        proxy: { rotate: false, segments: true },
+        cors: false,
+      },
+      pewe: {
+        name: "pewe",
+        visible: true,
+        player: "native",
+        parent: null,
+        relationship: null,
+        capabilities: { sub: true, ssub: false, download: false, skip_times: false, thumbnails: false },
+        proxy: { rotate: false, segments: true },
+        cors: false,
+      },
+      bonk: {
+        name: "bonk",
+        visible: true,
+        player: "native",
+        parent: null,
+        relationship: null,
+        variantOrder: ["ssub", "sub"],
+        capabilities: { sub: true, ssub: true, download: true, skip_times: true, thumbnails: false },
+        proxy: { rotate: false, segments: false },
+        cors: false,
+      },
+      bee: {
+        name: "bee",
+        visible: true,
+        player: "native",
+        parent: null,
+        relationship: null,
+        capabilities: { sub: false, ssub: true, download: false, skip_times: false, thumbnails: false },
+        proxy: { rotate: false, segments: true },
+        cors: false,
+      },
+      ally: {
+        name: "ally",
+        visible: true,
+        player: "native",
+        parent: null,
+        relationship: null,
+        capabilities: { sub: true, ssub: false, download: true, skip_times: false, thumbnails: true },
+        proxy: false,
+        cors: true,
+        fallback: 2,
+      },
+      moo: {
+        name: "moo",
+        visible: true,
+        player: "native",
+        parent: null,
+        relationship: null,
+        capabilities: { sub: true, ssub: false, download: true, skip_times: false, thumbnails: false },
+        proxy: { rotate: false, segments: true },
+        cors: false,
+      },
+      hop: {
+        name: "hop",
+        visible: true,
+        player: "native",
+        parent: null,
+        relationship: null,
+        capabilities: { sub: false, ssub: true, download: false, skip_times: false, thumbnails: true },
+        proxy: { rotate: false, segments: true },
+        cors: false,
+      },
+      nun: {
+        name: "nun",
+        visible: true,
+        player: "iframe",
+        parent: "ally",
+        relationship: "embed",
+        capabilities: { sub: true, ssub: false, download: false, skip_times: false, thumbnails: false },
+        proxy: false,
+        cors: false,
+      },
+      bun: {
+        name: "bun",
+        visible: true,
+        player: "iframe",
+        parent: "bee",
+        relationship: "embed",
+        capabilities: { sub: false, ssub: true, download: false, skip_times: false, thumbnails: false },
+        proxy: false,
+        cors: false,
+      },
+      twin: {
+        name: "twin",
+        visible: true,
+        player: "iframe",
+        parent: "bonk",
+        relationship: "embed",
+        variantOrder: ["sub", "ssub"],
+        capabilities: { sub: true, ssub: true, download: false, skip_times: false, thumbnails: false },
+        proxy: false,
+        cors: false,
+      },
+      cog: {
+        name: "cog",
+        visible: true,
+        player: "iframe",
+        parent: "moo",
+        relationship: "embed",
+        capabilities: { sub: true, ssub: false, download: false, skip_times: false, thumbnails: false },
+        proxy: false,
+        cors: false,
+      },
+      telli: {
+        name: "telli",
+        visible: false,
+        player: "iframe",
+        parent: "kiwi",
+        relationship: "embed",
+        capabilities: { sub: true, ssub: false, download: false, skip_times: false, thumbnails: false },
+        proxy: false,
+        cors: false,
+      },
+    };
+
+    const order = ["kiwi", "pewe", "bonk", "bee", "ally", "moo", "hop", "nun", "bun", "twin", "cog", "telli"];
+
+    jsonResponse(res, {
+      providers,
+      order,
+      total: order.length,
+      description: "Provider capabilities and configuration",
+      capabilities: {
+        sub: "External subtitles (WebVTT)",
+        ssub: "Soft subtitles (embedded in video stream)",
+        download: "Direct download URL available",
+        skip_times: "OP/ED skip timestamps available",
+        thumbnails: "Episode thumbnail images available",
+      },
+    });
+  });
+
   // ---- FEATURE: Health check endpoint ----
   router.get("/health", (req, res) => {
     const uptime = Math.floor((Date.now() - startTime) / 1000);
@@ -918,7 +1102,7 @@ const createApiRoutes = (jsonResponse, jsonError, startTime) => {
       success: true,
       results: {
         status: "healthy",
-        version: "2.0.0",
+        version: "2.1.0",
         uptime: `${hours}h ${minutes}m ${seconds}s`,
         uptimeSeconds: uptime,
         timestamp: new Date().toISOString(),
@@ -932,7 +1116,7 @@ const createApiRoutes = (jsonResponse, jsonError, startTime) => {
           size: require("../helpers/cache").getCacheSize(),
           maxSize: 100,
         },
-        endpoints: 35,
+        endpoints: 36,
         providers: ["kiwi", "pewe", "bee", "bonk", "bun", "ally", "nun", "twin", "cog", "moo", "hop", "telli"],
       },
     });
@@ -960,7 +1144,7 @@ const createApiRoutes = (jsonResponse, jsonError, startTime) => {
           currentSize: require("../helpers/cache").getCacheSize(),
           description: "Map-based cache with TTL expiration and FIFO eviction",
         },
-        endpoints: 35,
+        endpoints: 36,
         timestamp: new Date().toISOString(),
       },
     });
@@ -973,7 +1157,7 @@ const createApiRoutes = (jsonResponse, jsonError, startTime) => {
       info: {
         title: "MiruroAPI",
         description: "Free REST API for anime streaming data — AniList GraphQL + Miruro streaming providers",
-        version: "2.0.0",
+        version: "2.1.0",
         contact: { name: "Shineii86", url: "https://github.com/Shineii86/MiruroAPI" },
       },
       servers: [
@@ -1020,6 +1204,7 @@ const createApiRoutes = (jsonResponse, jsonError, startTime) => {
         "/stats/genre": { get: { summary: "Genre statistics", tags: ["Utility"] } },
         "/calendar": { get: { summary: "Monthly calendar", tags: ["Utility"] } },
         "/timeline/{id}": { get: { summary: "Anime timeline", tags: ["Utility"] } },
+        "/providers": { get: { summary: "Provider capabilities", tags: ["System"] } },
         "/health": { get: { summary: "Health check", tags: ["System"] } },
         "/stats": { get: { summary: "API statistics", tags: ["System"] } },
         "/openapi": { get: { summary: "OpenAPI spec", tags: ["System"] } },
