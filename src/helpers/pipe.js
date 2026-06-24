@@ -116,15 +116,20 @@ const translateId = (encodedId) => {
 // ---- FEATURE: Recursively decode all base64 IDs in a nested object ----
 /**
  * Walks a JSON structure and decodes any base64 "id" fields.
- * Handles nested objects and arrays of objects.
+ * Saves the original base64 value in a `rawPipeId` field on episode objects
+ * so the pipe sources endpoint can be called directly from the client.
  *
- * @param {object|Array} obj - The object or array to process
+ * @param {object|Array} obj - The object or process
  * @returns {object|Array} The same object with decoded IDs (mutated in place)
  */
 const deepTranslate = (obj) => {
   if (obj && typeof obj === "object") {
     for (const key of Object.keys(obj)) {
       if (key === "id" && typeof obj[key] === "string") {
+        // NOTE: Save original base64 before decoding (needed for pipe sources call)
+        if (obj.number !== undefined) {
+          obj.rawPipeId = obj[key];
+        }
         obj[key] = translateId(obj[key]);
       } else if (typeof obj[key] === "object") {
         deepTranslate(obj[key]);
@@ -173,11 +178,9 @@ const injectSourceSlugs = (data, anilistId) => {
 
       for (const ep of epList) {
         if (ep.id && ep.number) {
-          const origId = ep.id;
-          // NOTE: Preserve the raw pipe ID so getWatchSources can resolve it later
-          ep.rawPipeId = origId;
-          // NOTE: Take only the prefix before ":" for the slug
-          const prefix = origId.includes(":") ? origId.split(":")[0] : origId;
+          // NOTE: rawPipeId is already set by deepTranslate — preserve original base64
+          // Take only the prefix before ":" for the slug
+          const prefix = ep.id.includes(":") ? ep.id.split(":")[0] : ep.id;
           ep.id = `watch/${provName}/${anilistId}/${category}/${prefix}-${ep.number}`;
         }
       }
@@ -306,14 +309,16 @@ const getWatchSources = async (provider, anilistId, category, slug) => {
   const episodes = provData.episodes?.[category] || [];
   let targetId = null;
 
-  // NOTE: Match slug against the tail of the episode ID (e.g. "animedao-1")
+  // NOTE: fetchRawEpisodes returns raw pipe IDs (e.g. "animedao:cowboy-bebop:1")
+  // Build the slug from the prefix and episode number to match against the URL slug
   for (const ep of episodes) {
-    if (ep.id) {
-      const epSlug = ep.id.split("/").pop();
-      if (epSlug === slug && ep.rawPipeId) {
-        targetId = ep.rawPipeId;
-        break;
-      }
+    const origId = ep.id || "";
+    const prefix = origId.includes(":") ? origId.split(":")[0] : origId;
+    const generated = `${prefix}-${ep.number}`;
+
+    if (generated === slug) {
+      targetId = ep.id; // getSources expects decoded ID, it will base64url-encode
+      break;
     }
   }
 
