@@ -1,28 +1,552 @@
 # API Endpoints Reference
 
-Complete documentation for all 18 MiruroAPI endpoints.
+Complete documentation for all 35 MiruroAPI v2.0.0 endpoints.
 
 ---
 
 ## Table of Contents
 
-- [Health Check](#health-check)
-- [Stats](#stats)
+### Search & Discovery
 - [Search](#search)
 - [Suggestions](#suggestions)
 - [Filter](#filter)
+- [Multi-Search](#multi-search)
+
+### Collections
 - [Trending](#trending)
+- [Trending Daily](#trending-daily)
+- [Trending Weekly](#trending-weekly)
 - [Popular](#popular)
+- [Top](#top)
 - [Upcoming](#upcoming)
 - [Recent](#recent)
 - [Spotlight](#spotlight)
 - [Schedule](#schedule)
+- [Random](#random)
+- [Upcoming Countdown](#upcoming-countdown)
+
+### Seasonal & Studio
+- [Seasonal Anime](#seasonal-anime)
+- [Anime by Studio](#anime-by-studio)
+
+### Genres & Tags
+- [Genres](#genres)
+- [Tags](#tags)
+- [Anime by Genre](#anime-by-genre)
+- [Anime by Year](#anime-by-year)
+- [Anime by Status](#anime-by-status)
+- [Anime by Format](#anime-by-format)
+
+### Character & Staff
+- [Character Detail](#character-detail)
+- [Staff Detail](#staff-detail)
+- [Search Characters](#search-characters)
+- [Search Staff](#search-staff)
+
+### Anime Details
 - [Anime Info](#anime-info)
 - [Characters](#characters)
 - [Relations](#relations)
 - [Recommendations](#recommendations)
+
+### Streaming & Downloading
 - [Episodes](#episodes)
+- [Batch Episodes](#batch-episodes)
+- [Sources (Detailed)](#sources-detailed)
+- [Stream (Quality Fallback)](#stream-quality-fallback)
+- [Download URL](#download-url)
 - [Watch (Streaming)](#watch-streaming)
+
+### Utility
+- [Compare](#compare)
+- [Genre Stats](#genre-stats)
+- [Calendar](#calendar)
+- [Timeline](#timeline)
+
+### System
+- [Health Check](#health-check)
+- [Stats](#stats)
+- [OpenAPI](#openapi)
+
+---
+
+## Search
+
+```
+GET /api/search?query=naruto
+```
+
+Full-text anime search with pagination.
+
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| query | string | required | Search query |
+| page | int | 1 | Page number |
+| per_page | int | 20 | Results per page (max 50) |
+
+---
+
+## Suggestions
+
+```
+GET /api/suggestions?query=naruto
+```
+
+Lightweight autocomplete suggestions (max 8 results).
+
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| query | string | required | Search query |
+
+---
+
+## Filter
+
+```
+GET /api/filter?genre=Action&year=2024&season=SPRING
+```
+
+Advanced anime filter with multiple parameters.
+
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| genre | string | — | Genre name |
+| tag | string | — | Tag name |
+| year | int | — | Season year |
+| season | string | — | WINTER, SPRING, SUMMER, FALL |
+| format | string | — | TV, MOVIE, OVA, ONA, SPECIAL |
+| status | string | — | RELEASING, FINISHED, NOT_YET_RELEASED |
+| sort | string | POPULARITY_DESC | Sort order |
+| page | int | 1 | Page number |
+| per_page | int | 20 | Results per page |
+
+---
+
+## Multi-Search
+
+```
+GET /api/multi-search?q=naruto&genre=Action&year=2024
+```
+
+Combined query + filters search.
+
+---
+
+## Trending
+
+```
+GET /api/trending?page=1&per_page=20
+```
+
+Currently trending anime.
+
+---
+
+## Trending Daily
+
+```
+GET /api/trending/daily
+```
+
+Trending anime from the last 7 days.
+
+---
+
+## Trending Weekly
+
+```
+GET /api/trending/weekly
+```
+
+Trending anime from the last 30 days.
+
+---
+
+## Popular
+
+```
+GET /api/popular
+```
+
+Most popular anime of all time.
+
+---
+
+## Top
+
+```
+GET /api/top
+```
+
+Top anime by score (all time).
+
+---
+
+## Upcoming
+
+```
+GET /api/upcoming
+```
+
+Most anticipated upcoming anime.
+
+---
+
+## Recent
+
+```
+GET /api/recent
+```
+
+Currently airing anime.
+
+---
+
+## Spotlight
+
+```
+GET /api/spotlight
+```
+
+Top 10 trending + popular anime for hero banners.
+
+---
+
+## Schedule
+
+```
+GET /api/schedule?page=1&per_page=20
+```
+
+Airing schedule with timestamps.
+
+---
+
+## Random
+
+```
+GET /api/random
+```
+
+Returns a random anime.
+
+---
+
+## Upcoming Countdown
+
+```
+GET /api/upcoming/countdown
+```
+
+Next 10 episodes airing soon.
+
+---
+
+## Seasonal Anime
+
+```
+GET /api/season/2025/spring
+```
+
+Anime for a specific year and season.
+
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| year | int | required | Year (e.g., 2025) |
+| season | string | required | WINTER, SPRING, SUMMER, FALL |
+
+---
+
+## Anime by Studio
+
+```
+GET /api/studio/MAPPA
+```
+
+All anime produced by a specific studio.
+
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| name | string | required | Studio name |
+
+---
+
+## Genres
+
+```
+GET /api/genres
+```
+
+Returns all available genres from AniList.
+
+---
+
+## Tags
+
+```
+GET /api/tags
+```
+
+Returns all available tags from AniList.
+
+---
+
+## Anime by Genre
+
+```
+GET /api/genre/Action
+```
+
+All anime in a specific genre.
+
+---
+
+## Anime by Year
+
+```
+GET /api/year/2024
+```
+
+All anime from a specific year.
+
+---
+
+## Anime by Status
+
+```
+GET /api/status/RELEASING
+```
+
+All anime with a specific status (RELEASING, FINISHED, NOT_YET_RELEASED).
+
+---
+
+## Anime by Format
+
+```
+GET /api/format/MOVIE
+```
+
+All anime with a specific format (TV, MOVIE, OVA, ONA, SPECIAL).
+
+---
+
+## Character Detail
+
+```
+GET /api/character/1
+```
+
+Detailed character info with anime list.
+
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| id | int | required | AniList character ID |
+
+---
+
+## Staff Detail
+
+```
+GET /api/staff/1
+```
+
+Detailed staff info with anime list.
+
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| id | int | required | AniList staff ID |
+
+---
+
+## Search Characters
+
+```
+GET /api/characters?query=kaneki
+```
+
+Search characters by name.
+
+---
+
+## Search Staff
+
+```
+GET /api/staff?query=oda
+```
+
+Search staff by name.
+
+---
+
+## Anime Info
+
+```
+GET /api/info/20605
+```
+
+Complete anime info including characters, relations, recommendations, trailer, stats.
+
+---
+
+## Characters
+
+```
+GET /api/anime/20605/characters?page=1&per_page=25
+```
+
+Paginated character list with voice actors.
+
+---
+
+## Relations
+
+```
+GET /api/anime/20605/relations
+```
+
+Related anime (sequels, prequels, spin-offs).
+
+---
+
+## Recommendations
+
+```
+GET /api/anime/20605/recommendations?page=1&per_page=10
+```
+
+Community recommendations sorted by rating.
+
+---
+
+## Episodes
+
+```
+GET /api/episodes/20605
+```
+
+Episode list from all providers with sub/dub support.
+
+---
+
+## Batch Episodes
+
+```
+GET /api/episodes/20605/batch?provider=kiwi&category=sub&slugs=animepahe-1,animepahe-2
+```
+
+Fetch multiple episode sources in parallel.
+
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| provider | string | kiwi | Provider name |
+| category | string | sub | sub or dub |
+| slugs | string | required | Comma-separated episode slugs |
+
+---
+
+## Sources (Detailed)
+
+```
+GET /api/sources?episodeId=xxx&provider=kiwi&anilistId=20605&category=sub
+```
+
+Streaming sources with raw episode ID.
+
+---
+
+## Stream (Quality Fallback)
+
+```
+GET /api/stream?provider=kiwi&anilistId=20605&category=sub&slug=animepahe-1&quality=1080p
+```
+
+Streaming sources with automatic quality fallback.
+
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| provider | string | required | Provider name |
+| anilistId | int | required | AniList anime ID |
+| category | string | sub | sub or dub |
+| slug | string | required | Episode slug |
+| quality | string | 1080p | Preferred quality |
+
+---
+
+## Download URL
+
+```
+GET /api/download?provider=kiwi&anilistId=20605&category=sub&slug=animepahe-1
+```
+
+Returns the download URL for an episode.
+
+---
+
+## Watch (Streaming)
+
+```
+GET /api/watch/kiwi/20605/sub/animepahe-1
+```
+
+Streaming sources via URL path (recommended).
+
+| Param | Type | Description |
+|-------|------|-------------|
+| provider | string | Provider name |
+| anilistId | int | AniList anime ID |
+| category | string | sub or dub |
+| slug | string | Episode slug |
+
+---
+
+## Compare
+
+```
+GET /api/compare/20605/20
+```
+
+Compare two anime side by side.
+
+| Param | Type | Description |
+|-------|------|-------------|
+| id1 | int | First anime ID |
+| id2 | int | Second anime ID |
+
+---
+
+## Genre Stats
+
+```
+GET /api/stats/genre
+```
+
+Genre statistics with top anime per genre.
+
+---
+
+## Calendar
+
+```
+GET /api/calendar?year=2025&month=6
+```
+
+Monthly airing calendar.
+
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| year | int | current | Year |
+| month | int | current | Month (1-12) |
+
+---
+
+## Timeline
+
+```
+GET /api/timeline/20605
+```
+
+Anime release timeline with prequels, sequels, spin-offs.
 
 ---
 
@@ -32,7 +556,7 @@ Complete documentation for all 18 MiruroAPI endpoints.
 GET /api/health
 ```
 
-Returns API health status, version, uptime, memory usage, and available providers.
+API health status, version, uptime, memory, cache stats.
 
 **Response:**
 
@@ -41,11 +565,12 @@ Returns API health status, version, uptime, memory usage, and available provider
   "success": true,
   "results": {
     "status": "healthy",
-    "version": "1.2.0",
+    "version": "2.0.0",
     "uptime": "0h 0m 34s",
     "node": "v24.14.1",
-    "memory": { "used": "13MB", "total": "15MB" },
-    "endpoints": 16,
+    "memory": { "used": "13MB", "total": "15MB", "rss": "25MB" },
+    "cache": { "size": 12, "maxSize": 100 },
+    "endpoints": 35,
     "providers": ["kiwi","pewe","bee","bonk","bun","ally","nun","twin","cog","moo","hop","telli"]
   }
 }
@@ -59,317 +584,20 @@ Returns API health status, version, uptime, memory usage, and available provider
 GET /api/stats
 ```
 
-Returns request statistics, cache info, and memory usage.
+Cache & API statistics including request count and success rate.
 
 ---
 
-## Search
+## OpenAPI
 
 ```
-GET /api/search
+GET /api/openapi
 ```
 
-| Param | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-| `query` | string | Yes | — | Search keyword |
-| `page` | number | No | 1 | Page number |
-| `per_page` | number | No | 20 | Results per page |
-
-**Example:** `GET /api/search?query=naruto&per_page=2`
-
-**Response:**
-
-```json
-{
-  "success": true,
-  "results": {
-    "page": 1,
-    "perPage": 2,
-    "total": 5000,
-    "hasNextPage": true,
-    "results": [
-      {
-        "id": 20,
-        "title": { "romaji": "NARUTO", "english": "Naruto", "native": "NARUTO -ナルト-" },
-        "coverImage": { "large": "https://s4.anilist.co/file/..." },
-        "format": "TV",
-        "episodes": 220,
-        "status": "FINISHED",
-        "averageScore": 80,
-        "genres": ["Action","Adventure","Comedy","Drama","Fantasy","Supernatural"]
-      }
-    ]
-  }
-}
-```
+Returns the OpenAPI 3.0.3 specification in JSON format.
 
 ---
 
-## Suggestions
-
-```
-GET /api/suggestions
-```
-
-| Param | Type | Required | Description |
-|-------|------|----------|-------------|
-| `query` | string | Yes | Search keyword |
-
-**Example:** `GET /api/suggestions?query=naruto`
-
-Returns fast autocomplete suggestions with title, poster, format, status, year, and episode count.
-
----
-
-## Filter
-
-```
-GET /api/filter
-```
-
-| Param | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-| `genre` | string | No | — | Genre name (e.g. "Action") |
-| `tag` | string | No | — | Tag name |
-| `year` | number | No | — | Release year |
-| `season` | string | No | — | FALL, WINTER, SPRING, SUMMER |
-| `format` | string | No | — | TV, MOVIE, OVA, ONA, SPECIAL, MUSIC |
-| `status` | string | No | — | RELEASING, FINISHED, NOT_YET_RELEASED, CANCELLED |
-| `sort` | string | No | POPULARITY_DESC | Sort order |
-| `page` | number | No | 1 | Page number |
-| `per_page` | number | No | 20 | Results per page |
-
-**Example:** `GET /api/filter?genre=Action&year=2024&season=WINTER&per_page=3`
-
----
-
-## Trending
-
-```
-GET /api/trending
-```
-
-| Param | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-| `per_page` | number | No | 20 | Results per page |
-
-**Example:** `GET /api/trending?per_page=5`
-
----
-
-## Popular
-
-```
-GET /api/popular
-```
-
-| Param | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-| `per_page` | number | No | 20 | Results per page |
-
----
-
-## Upcoming
-
-```
-GET /api/upcoming
-```
-
-| Param | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-| `per_page` | number | No | 20 | Results per page |
-
----
-
-## Recent
-
-```
-GET /api/recent
-```
-
-| Param | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-| `per_page` | number | No | 20 | Results per page |
-
----
-
-## Spotlight
-
-```
-GET /api/spotlight
-```
-
-Returns featured/spotlight anime for the hero carousel.
-
----
-
-## Schedule
-
-```
-GET /api/schedule
-```
-
-| Param | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-| `date` | string | No | today | Date in YYYY-MM-DD format |
-
----
-
-## Anime Info
-
-```
-GET /api/info/:id
-```
-
-| Param | Type | Required | Description |
-|-------|------|----------|-------------|
-| `id` | number | Yes | AniList anime ID |
-
-**Example:** `GET /api/info/20`
-
-**Response:**
-
-```json
-{
-  "success": true,
-  "results": {
-    "id": 20,
-    "idMal": 20,
-    "title": { "romaji": "NARUTO", "english": "Naruto", "native": "NARUTO -ナルト-" },
-    "description": "Naruto Uzumaki, a hyperactive and knuckle-headed ninja...",
-    "coverImage": { "large": "https://s4.anilist.co/file/..." },
-    "format": "TV",
-    "episodes": 220,
-    "duration": 23,
-    "status": "FINISHED",
-    "averageScore": 80,
-    "genres": ["Action","Adventure","Comedy","Drama","Fantasy","Supernatural"],
-    "studios": [{ "name": "Studio Pierrot", "isAnimationStudio": true }]
-  }
-}
-```
-
----
-
-## Characters
-
-```
-GET /api/anime/:id/characters
-```
-
-| Param | Type | Required | Description |
-|-------|------|----------|-------------|
-| `id` | number | Yes | AniList anime ID |
-
-**Example:** `GET /api/anime/20/characters`
-
-Returns characters with voice actors.
-
----
-
-## Relations
-
-```
-GET /api/anime/:id/relations
-```
-
-| Param | Type | Required | Description |
-|-------|------|----------|-------------|
-| `id` | number | Yes | AniList anime ID |
-
-Returns related anime (sequels, prequels, side stories, etc.).
-
----
-
-## Recommendations
-
-```
-GET /api/anime/:id/recommendations
-```
-
-| Param | Type | Required | Description |
-|-------|------|----------|-------------|
-| `id` | number | Yes | AniList anime ID |
-
-Returns recommended anime based on the given ID.
-
----
-
-## Episodes
-
-```
-GET /api/episodes/:id
-```
-
-| Param | Type | Required | Description |
-|-------|------|----------|-------------|
-| `id` | number | Yes | AniList anime ID |
-
-**Example:** `GET /api/episodes/20`
-
-**Response:**
-
-```json
-{
-  "success": true,
-  "results": {
-    "providers": {
-      "kiwi": {
-        "meta": { "id": "1571", "title": "Naruto", "type": "TV" },
-        "episodes": {
-          "sub": [
-            {
-              "id": "watch/kiwi/20/sub/animepahe-1",
-              "number": 1,
-              "title": "Enter: Naruto Uzumaki!",
-              "airDate": "2002-10-03",
-              "audio": "sub",
-              "filler": false
-            }
-          ]
-        }
-      }
-    }
-  }
-}
-```
-
----
-
-## Watch (Streaming)
-
-```
-GET /api/watch/:provider/:anilistId/:category/:slug
-```
-
-| Param | Type | Required | Description |
-|-------|------|----------|-------------|
-| `provider` | string | Yes | Provider name (kiwi, pewe, etc.) |
-| `anilistId` | number | Yes | AniList anime ID |
-| `category` | string | Yes | sub or dub |
-| `slug` | string | Yes | Episode slug from episodes response |
-
-**Example:** `GET /api/watch/kiwi/20/sub/animepahe-1`
-
-**Response:**
-
-```json
-{
-  "success": true,
-  "results": {
-    "streams": [
-      {
-        "url": "https://vault-01.uwucdn.top/stream/.../uwu.m3u8",
-        "type": "hls",
-        "quality": "360p",
-        "resolution": { "width": 640, "height": 360 },
-        "codec": "h264",
-        "audio": "sub",
-        "fansub": "df68",
-        "referer": "https://kwik.cx/e/..."
-      }
-    ],
-    "download": "https://pahe.win/LJmbA"
-  }
-}
-```
+> 📝 All endpoints return `{ "success": true, "results": {...} }` on success and `{ "success": false, "message": "..." }` on error.
+> 
+> 🎬 Creator attribution is injected into every response: `{ "creator": "Shinei Nouzen", "github": "...", "telegram": "...", "message": "...", "timestamp": "..." }`

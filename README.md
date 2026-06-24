@@ -19,15 +19,15 @@
   <img src="https://img.shields.io/badge/AniList-GraphQL-02A6E4?style=flat-square&logo=graphql&logoColor=white" alt="AniList GraphQL"/>
   <img src="https://img.shields.io/badge/Vercel-Serverless-000000?style=flat-square&logo=vercel&logoColor=white" alt="Vercel"/>
   <img src="https://img.shields.io/badge/License-MIT-22c55e?style=flat-square&logo=mit&logoColor=white" alt="License"/>
-  <img src="https://img.shields.io/badge/Version-1.2.0-f43f8e?style=flat-square&logoColor=white" alt="Version"/>
-  <img src="https://img.shields.io/badge/Endpoints-18-6366f1?style=flat-square&logoColor=white" alt="Endpoints"/>
+  <img src="https://img.shields.io/badge/Version-2.0.0-f43f8e?style=flat-square&logoColor=white" alt="Version"/>
+  <img src="https://img.shields.io/badge/Endpoints-35-6366f1?style=flat-square&logoColor=white" alt="Endpoints"/>
   <img src="https://img.shields.io/badge/Providers-12-a855f7?style=flat-square&logoColor=white" alt="Providers"/>
 </p>
 
 <p align="center">
   <b>A complete RESTful API for anime streaming data powered by AniList GraphQL and Miruro providers</b><br/>
   Search, browse, filter, watch — every endpoint returns fresh data with smart caching.<br/>
-  18 endpoints, 12 streaming providers, M3U8 URLs with subtitles and skip timestamps.
+  35 endpoints, 12 streaming providers, M3U8 URLs with subtitles, skip timestamps, and batch operations.
 </p>
 
 <p align="center">
@@ -84,7 +84,7 @@
 
 ### Why MiruroAPI?
 
-- 🎬 **18 Endpoints** — Complete anime data coverage
+- 🎬 **35 Endpoints** — Complete anime data coverage
 - 🔍 **Full-Text Search** — Search anime by keyword with suggestions
 - 🎭 **Characters & Voice Actors** — Full character data from AniList
 - 🎯 **Advanced Filtering** — Genre, year, season, format, sort
@@ -92,6 +92,8 @@
 - 📅 **Airing Schedule** — See what's airing on any date
 - 📡 **12 Streaming Providers** — M3U8 streaming sources
 - ⏭️ **Skip Timestamps** — OP/ED skip data
+- 🎭 **Character & Staff Search** — Search characters and staff by name
+- 🎬 **Batch Episodes** — Fetch multiple episode sources in parallel
 - ⚡ **Smart Caching** — In-memory Map with configurable TTL
 - 🔒 **CORS Enabled** — Works from any frontend, no proxy needed
 - 🚀 **Zero-Config Deploy** — One click to Vercel, or run standalone with Express
@@ -138,7 +140,9 @@ flowchart TD
 - **AniList GraphQL** for rich metadata
 - **Miruro pipe** for streaming sources
 - **Smart caching** with configurable TTL
-- **18 RESTful endpoints**
+- **35 RESTful endpoints**
+- **Gzip compression** — 30-70% smaller responses
+- **Request logging** — method, path, status, duration
 - **Graceful error handling** per endpoint
 - **Rate limiting** (100 req/min per IP)
 
@@ -152,6 +156,9 @@ flowchart TD
 - **Characters** with voice actors
 - **Relations** and **Recommendations**
 - **Airing schedule** by date
+- **Seasonal anime** by year + season
+- **Studio filter** — anime by studio name
+- **Character & Staff search**
 
     </td>
   </tr>
@@ -165,6 +172,9 @@ flowchart TD
 - **Download links** when available
 - **Sub/Dub** support per provider
 - **Codec and fansub** metadata
+- **Batch episode fetching** — multiple sources in parallel
+- **Quality fallback** — auto 1080p → 720p → 360p
+- **Subtitle extraction** — expose subtitle URLs
 
     </td>
     <td>
@@ -185,7 +195,7 @@ flowchart TD
 
 | Feature | Description | Status |
 |:---|:---|:---:|
-| 🎬 18 API Endpoints | Complete anime data coverage | ✅ |
+| 🎬 35 API Endpoints | Complete anime data coverage | ✅ |
 | 🔍 Full-Text Search | Keyword search with pagination | ✅ |
 | 💡 Search Suggestions | Fast autocomplete | ✅ |
 | 🎯 Advanced Filtering | Genre, year, season, format, sort | ✅ |
@@ -317,7 +327,7 @@ MiruroAPI/
 │   │   └── 📄 cache.js                     #       💾 In-memory cache with TTL
 │   │
 │   └── 📂 routes/                          #    🛤️ Express routes
-│       └── 📄 apiRoutes.js                 #       🌐 Main API routes (18 endpoints)
+│       └── 📄 apiRoutes.js                 #       🌐 Main API routes (35 endpoints)
 │
 ├── 📄 server.js                            # 🚀 Express server entry point
 ├── 📄 package.json                         # 📦 Dependencies & scripts
@@ -480,13 +490,13 @@ console.log(resp.data);
   "success": true,
   "results": {
     "status": "healthy",
-    "version": "1.2.0",
+    "version": "2.0.0",
     "uptime": "0h 0m 34s",
     "uptimeSeconds": 34,
     "timestamp": "2026-06-09T09:55:00.884Z",
     "node": "v24.14.1",
     "memory": { "used": "13MB", "total": "15MB" },
-    "endpoints": 16,
+    "endpoints": 35,
     "providers": ["kiwi","pewe","bee","bonk","bun","ally","nun","twin","cog","moo","hop","telli"]
   }
 }
@@ -527,7 +537,7 @@ console.log(resp.data);
     "uptime": "0h 0m 34s",
     "requests": { "total": 156, "errors": 3, "successRate": "98.1%" },
     "cache": { "size": 12, "maxSize": 100, "ttl": "1 min" },
-    "endpoints": 16,
+    "endpoints": 35,
     "timestamp": "2026-06-09T09:55:00.884Z"
   }
 }
@@ -1398,6 +1408,9 @@ docker run -p 3000:3000 miruroapi
 
 | Version | Date | Key Changes |
 |:---|:---|:---|
+| **2.0.0** | 2026-06-25 | Major upgrade — 35 endpoints, compression, streaming improvements, new features |
+| **1.4.0** | 2026-06-25 | Creator attribution middleware, Vercel deployment fix, security headers |
+| **1.3.0** | 2026-06-25 | Full landing page upgrade with premium design |
 | **1.2.0** | 2026-06-09 | Critical response format fix, full endpoint diagnostic, 18/18 passing |
 | **1.1.0** | 2026-06-09 | Swagger UI docs, OpenAPI spec, mappings field, Docker, landing page |
 | **1.0.0** | 2026-06-09 | Initial release — 16 endpoints, AniList GraphQL + Miruro pipe, caching |
@@ -1493,7 +1506,7 @@ Yes! Use <code>npm start</code> to run the Express server on any VPS, Docker con
 
 ### ✅ Completed
 
-- [x] 🎬 18 API endpoints covering all data
+- [x] 🎬 35 API endpoints covering all data
 - [x] 🔍 Full-text search with pagination
 - [x] 💡 Search suggestions for autocomplete
 - [x] 🎯 Advanced filtering (genre, year, season, format, sort)
