@@ -1,5 +1,17 @@
 const axios = require("axios");
 
+const PROXY_KEY = Buffer.from("a54d389c18527d9fd3e7f0643e27edbe", "hex");
+const PRU_BASE = "https://pru.ultracloud.cc/";
+
+function encodeForPru(rawUrl) {
+  const urlBytes = Buffer.from(rawUrl, "utf-8");
+  const xored = Buffer.alloc(urlBytes.length);
+  for (let i = 0; i < urlBytes.length; i++) {
+    xored[i] = urlBytes[i] ^ PROXY_KEY[i % PROXY_KEY.length];
+  }
+  return PRU_BASE + xored.toString("base64url");
+}
+
 module.exports = async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
@@ -24,31 +36,28 @@ module.exports = async function handler(req, res) {
     });
 
     const contentType = response.headers["content-type"] || "";
-    res.setHeader("Content-Type", contentType);
     res.setHeader("Cache-Control", "public, max-age=300");
 
     if (contentType.includes("mpegurl") || url.endsWith(".m3u8") || contentType.includes("x-mpegURL")) {
       let m3u8 = Buffer.from(response.data).toString("utf-8");
       const baseUrl = new URL(url);
-      const proxyBase = "/api/proxy?url=";
-      const refParam = `&referer=${encodeURIComponent(baseUrl.origin + "/")}`;
 
-      // Rewrite absolute URLs (https://...)
+      // Rewrite all URLs to go through pru.ultracloud.cc proxy
       m3u8 = m3u8.replace(/^(https?:\/\/[^\s]+)$/gm, (match) => {
-        return `${proxyBase}${encodeURIComponent(match)}${refParam}`;
+        return encodeForPru(match);
       });
-
-      // Rewrite relative URLs (no scheme, not tags, not comments)
-      // Matches: filename.m3u8, filename.ts, path/file.m3u8, etc.
+      // Rewrite relative URLs
       m3u8 = m3u8.replace(/^([^\s#<][^\s]*\.(m3u8|ts|m4s|m4v|mp4|cmfv|cmfa|vtt|srt|ass|json|aac|mp3))(?:\?[^\s]*)?$/gm, (match) => {
         const absolute = new URL(match, baseUrl).href;
-        return `${proxyBase}${encodeURIComponent(absolute)}${refParam}`;
+        return encodeForPru(absolute);
       });
 
       res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
       return res.send(m3u8);
     }
 
+    // For segments/subtitles, pass through directly (they have CORS)
+    res.setHeader("Content-Type", contentType);
     res.send(Buffer.from(response.data));
   } catch (err) {
     res.status(500).json({ success: false, message: "Proxy failed: " + err.message });
