@@ -24,6 +24,22 @@
       "dest": "/api/index.js"
     },
     {
+      "src": "/docs",
+      "dest": "/public/docs.html"
+    },
+    {
+      "src": "/tos",
+      "dest": "/public/tos.html"
+    },
+    {
+      "src": "/privacy",
+      "dest": "/public/privacy.html"
+    },
+    {
+      "src": "/openapi.json",
+      "dest": "/public/openapi.json"
+    },
+    {
       "src": "/(.*)",
       "dest": "/public/$1"
     }
