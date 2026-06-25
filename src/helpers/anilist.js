@@ -660,7 +660,7 @@ const getTrendingDaily = async (page = 1, perPage = 20) => {
     query ($page: Int, $perPage: Int) {
       Page(page: $page, perPage: $perPage) {
         pageInfo { total currentPage lastPage hasNextPage perPage }
-        media(type: ANIME, sort: TRENDING_DESC, trending: 7) {
+        media(type: ANIME, sort: TRENDING_DESC) {
           ${MEDIA_LIST_FIELDS}
         }
       }
@@ -691,7 +691,7 @@ const getTrendingWeekly = async (page = 1, perPage = 20) => {
     query ($page: Int, $perPage: Int) {
       Page(page: $page, perPage: $perPage) {
         pageInfo { total currentPage lastPage hasNextPage perPage }
-        media(type: ANIME, sort: TRENDING_DESC, trending: 30) {
+        media(type: ANIME, sort: TRENDING_DESC) {
           ${MEDIA_LIST_FIELDS}
         }
       }
@@ -760,7 +760,7 @@ const getAnimeByStudio = async (studioName, page = 1, perPage = 20) => {
     query ($name: String, $page: Int, $perPage: Int) {
       Studio(search: $name) {
         id name isAnimationStudio siteUrl
-        media(type: ANIME, sort: POPULARITY_DESC, page: $page, perPage: $perPage) {
+        media(sort: POPULARITY_DESC, page: $page, perPage: $perPage) {
           pageInfo { total currentPage lastPage hasNextPage perPage }
           nodes { ${MEDIA_LIST_FIELDS} }
         }
