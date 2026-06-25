@@ -183,9 +183,37 @@ app.get("/docs", (req, res) => {
 // RESPONSE HELPERS
 // ══════════════════════════════════════════════════════════════
 
+// ---- FEATURE: Response helper — wrap data in standard success format ----
+/**
+ * Wraps data in the standard API success response format.
+ * All successful responses follow: { success: true, results: data }
+ *
+ * @param {import('express').Response} res - Express response object
+ * @param {any} data - The data to wrap
+ * @param {number} [status=200] - HTTP status code
+ * @returns {import('express').Response} Express response with JSON body
+ *
+ * @example
+ *   jsonResponse(res, { anime: [...] });
+ *   // => { "success": true, "results": { "anime": [...] } }
+ */
 const jsonResponse = (res, data, status = 200) =>
   res.status(status).json({ success: true, results: data });
 
+// ---- FEATURE: Error helper — wrap message in standard error format ----
+/**
+ * Wraps an error message in the standard API error response format.
+ * All error responses follow: { success: false, message: "..." }
+ *
+ * @param {import('express').Response} res - Express response object
+ * @param {string} [message="Internal server error"] - Error description
+ * @param {number} [status=500] - HTTP status code
+ * @returns {import('express').Response} Express response with JSON error body
+ *
+ * @example
+ *   jsonError(res, "Anime not found", 404);
+ *   // => { "success": false, "message": "Anime not found" }
+ */
 const jsonError = (res, message = "Internal server error", status = 500) =>
   res.status(status).json({ success: false, message });
 
