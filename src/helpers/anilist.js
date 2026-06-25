@@ -607,7 +607,7 @@ const getAllGenres = async () => {
  * @returns {Promise<Array>} Array of tag objects { name, description, category, rank, isGeneralSpoiler, isMediaSpoiler, isAdult }
  */
 const getAllTags = async () => {
-  const gql = `query { TagCollection { name description category rank isGeneralSpoiler isMediaSpoiler isAdult } }`;
+  const gql = `query { MediaTagCollection { name description category isGeneralSpoiler isMediaSpoiler isAdult } }`;
   const data = await anilistQuery(gql);
   return data.TagCollection;
 };
