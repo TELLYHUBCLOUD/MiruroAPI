@@ -320,10 +320,11 @@ const createApiRoutes = (jsonResponse, jsonError, startTime) => {
   // ---- FEATURE: Random anime of the day ----
   router.get("/random", async (req, res) => {
     try {
-      // NOTE: Use Date.now() + process.hrtime for randomness in serverless
+      // NOTE: Use multiple entropy sources for randomness in serverless
+      const now = Date.now();
       const hrtime = process.hrtime();
-      const seed = Date.now() ^ (hrtime[0] * 1000 + hrtime[1]);
-      const randomPage = (Math.abs(seed) % 499) + 1;
+      const entropy = (now * 31 + hrtime[0] * 17 + hrtime[1] * 13) ^ (process.pid * 7);
+      const randomPage = (Math.abs(entropy) % 499) + 1;
       const data = await anilist.getCollection("POPULARITY_DESC", null, randomPage, 1);
       const anime = data.results[0];
 
