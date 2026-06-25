@@ -30,13 +30,21 @@ module.exports = async function handler(req, res) {
     if (contentType.includes("mpegurl") || url.endsWith(".m3u8") || contentType.includes("x-mpegURL")) {
       let m3u8 = Buffer.from(response.data).toString("utf-8");
       const baseUrl = new URL(url);
+      const proxyBase = "/api/proxy?url=";
+      const refParam = `&referer=${encodeURIComponent(baseUrl.origin + "/")}`;
+
+      // Rewrite absolute URLs (https://...)
       m3u8 = m3u8.replace(/^(https?:\/\/[^\s]+)$/gm, (match) => {
-        return `/api/proxy?url=${encodeURIComponent(match)}&referer=${encodeURIComponent(baseUrl.origin + "/")}`;
+        return `${proxyBase}${encodeURIComponent(match)}${refParam}`;
       });
-      m3u8 = m3u8.replace(/^([^\s#][^\s]*\.(ts|m4s|m4v|mp4|cmfv|cmfa|vtt|srt|ass|json))(?:\?[^\s]*)?$/gm, (match) => {
+
+      // Rewrite relative URLs (no scheme, not tags, not comments)
+      // Matches: filename.m3u8, filename.ts, path/file.m3u8, etc.
+      m3u8 = m3u8.replace(/^([^\s#<][^\s]*\.(m3u8|ts|m4s|m4v|mp4|cmfv|cmfa|vtt|srt|ass|json|aac|mp3))(?:\?[^\s]*)?$/gm, (match) => {
         const absolute = new URL(match, baseUrl).href;
-        return `/api/proxy?url=${encodeURIComponent(absolute)}&referer=${encodeURIComponent(baseUrl.origin + "/")}`;
+        return `${proxyBase}${encodeURIComponent(absolute)}${refParam}`;
       });
+
       res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
       return res.send(m3u8);
     }
