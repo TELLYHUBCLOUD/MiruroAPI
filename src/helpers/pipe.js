@@ -408,20 +408,27 @@ const getWatchSources = async (provider, anilistId, category, slug) => {
   const episodes = provData.episodes?.[category] || [];
   let targetId = null;
 
-  // NOTE: After injectSourceSlugs, ep.id becomes "watch/{provider}/{anilistId}/{category}/{prefix}-{number}"
-  // Match the slug portion (last segment after the final "/") against the input slug.
-  // Use rawPipeId to get the original decoded ID for the pipe sources call.
+  // NOTE: Handle both raw pipe IDs ("animedao:witch-hat-atelier:1") and slugged IDs
+  // ("watch/bonk/147105/sub/animedao-1") which may exist if cache was mutated by injectSourceSlugs.
+  // Match slug against: last path segment (slugged) OR prefix-{number} (raw).
   for (const ep of episodes) {
-    const idParts = (ep.id || "").split("/");
-    const slugSuffix = idParts[idParts.length - 1];
+    const rawId = ep.id || "";
+    let match = false;
 
-    if (slugSuffix === slug) {
-      // Decode rawPipeId back to original pipe format (e.g. "animedao:witch-hat-atelier:1")
-      if (ep.rawPipeId) {
-        targetId = translateId(ep.rawPipeId);
-      } else {
-        targetId = ep.id;
-      }
+    // Case 1: Slugged ID — "watch/{provider}/{anilistId}/{category}/{prefix}-{number}"
+    if (rawId.includes("/")) {
+      const slugSuffix = rawId.split("/").pop();
+      match = slugSuffix === slug;
+    }
+    // Case 2: Raw pipe ID — "animedao:witch-hat-atelier:1"
+    else if (rawId.includes(":")) {
+      const prefix = rawId.split(":")[0];
+      match = `${prefix}-${ep.number}` === slug;
+    }
+
+    if (match) {
+      // Use rawPipeId if available (decoded pipe format), otherwise use the ep.id
+      targetId = ep.rawPipeId ? translateId(ep.rawPipeId) : rawId;
       break;
     }
   }
