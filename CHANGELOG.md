@@ -16,13 +16,21 @@
 
 #### Streaming Pipeline
 - Confirmed kiwi provider CDN (owocdn.top) serves real video content with CORS `*`
-- Confirmed bonk provider CDN (vibeplayer.site) returns streams
+- Confirmed bonk provider CDN (vibeplayer.site) returns streams + subtitles
 - bee/ally CDNs serve decoy PNGs to server IPs (confirmed)
 - Stream URLs returned as raw CDN URLs (browser loads directly)
 - Subtitles proxied through `/api/proxy` for CORS bypass
 
-#### Version Bump
-- MiruroAPI v2.1.3 (package.json, health endpoint, OpenAPI spec)
+#### Bug Fixes
+- Fixed `getWatchSources` slug matching — handles both raw pipe IDs and slugged IDs
+- `injectSourceSlugs` mutates cached data; getWatchSources now detects and handles both formats
+- Uses `rawPipeId` for decoded ID recovery
+
+#### Working Endpoints
+- `/api/watch/{provider}/{anilistId}/{category}/{slug}` — kiwi ✅ bonk ✅
+- `/api/stream?provider=...&anilistId=...&slug=...` — bestStream + subtitles
+- `/api/episodes/{id}` — episode list from all providers
+- `/api/sources` — may fail on first attempt due to Cloudflare rate limiting (retries help)
 
 ## v2.1.2
 ### Streaming Architecture — pru proxy + raw CDN URLs
