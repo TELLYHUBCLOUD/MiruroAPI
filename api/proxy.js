@@ -1,6 +1,9 @@
 const axios = require("axios");
 
-const PROXY_KEY = Buffer.from("a54d389c18527d9fd3e7f0643e27edbe", "hex");
+const PROXY_KEY = Buffer.from(
+  process.env.PRU_PROXY_KEY || "a54d389c18527d9fd3e7f0643e27edbe",
+  "hex"
+);
 const PRU_BASE = "https://pru.ultracloud.cc/";
 
 function base64urlXor(str) {

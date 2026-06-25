@@ -104,7 +104,7 @@ async function runTest(test) {
 }
 
 async function runAll() {
-  console.log(`\n🧪 MiruroAPI v2.1.0 — Running ${tests.length} tests...\n`);
+  console.log(`\n🧪 MiruroAPI v2.1.4 — Running ${tests.length} tests...\n`);
 
   for (const test of tests) {
     await runTest(test);

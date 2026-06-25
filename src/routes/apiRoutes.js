@@ -23,6 +23,18 @@ const pipe = require("../helpers/pipe");
 const { getCached, setCache } = require("../helpers/cache");
 const { addCreatorInfo } = require("../middleware/creatorInfo");
 
+// ---- FEATURE: Input sanitization helpers ----
+const sanitizeId = (val) => {
+  const n = parseInt(val);
+  return isNaN(n) || n <= 0 ? null : n;
+};
+
+const sanitizeString = (val, maxLen = 100) => {
+  if (typeof val !== "string") return null;
+  const cleaned = val.replace(/[<>"'`;\\]/g, "").trim();
+  return cleaned.length > 0 && cleaned.length <= maxLen ? cleaned : null;
+};
+
 // ══════════════════════════════════════════════════════════════
 // ROUTE REGISTRATION
 // ══════════════════════════════════════════════════════════════
@@ -116,16 +128,10 @@ const createApiRoutes = (jsonResponse, jsonError, startTime) => {
   // ---- FEATURE: Multi-parameter search (query + filters combined) ----
   router.get("/multi-search", async (req, res) => {
     try {
-      const { q, genre, tag, year, season, format, status, sort = "SEARCH_MATCH", page = 1, per_page = 20 } = req.query;
+      const { q, genre, tag, year, season, format, status, sort = "POPULARITY_DESC", page = 1, per_page = 20 } = req.query;
 
-      // NOTE: If only query is provided, use regular search
-      if (q && !genre && !tag && !year && !season && !format && !status) {
-        const result = await anilist.searchAnime(q, parseInt(page), parseInt(per_page));
-        return jsonResponse(res, result);
-      }
-
-      // NOTE: If filters only, use filter endpoint
       const result = await anilist.filterAnime({
+        search: q || null,
         genre, tag, year: year ? parseInt(year) : null,
         season, format, status, sort,
         page: parseInt(page), perPage: parseInt(per_page),
@@ -341,13 +347,15 @@ const createApiRoutes = (jsonResponse, jsonError, startTime) => {
   // ---- FEATURE: Seasonal anime by year and season ----
   router.get("/season/:year/:season", async (req, res) => {
     try {
-      const { year, season } = req.params;
+      const year = sanitizeId(req.params.year);
+      const season = sanitizeString(req.params.season?.toUpperCase());
+      if (!year || !season) return jsonError(res, "Invalid year or season", 400);
       const { page = 1, per_page = 20 } = req.query;
       const cacheKey = `season:${year}:${season}:${page}:${per_page}`;
 
       let result = getCached(cacheKey);
       if (!result) {
-        result = await anilist.getSeasonalAnime(parseInt(year), season, parseInt(page), parseInt(per_page));
+        result = await anilist.getSeasonalAnime(year, season, parseInt(page), parseInt(per_page));
         setCache(cacheKey, result, 300 * 1000);
       }
 
@@ -360,13 +368,14 @@ const createApiRoutes = (jsonResponse, jsonError, startTime) => {
   // ---- FEATURE: Anime by studio name ----
   router.get("/studio/:name", async (req, res) => {
     try {
-      const { name } = req.params;
+      const name = sanitizeString(decodeURIComponent(req.params.name));
+      if (!name) return jsonError(res, "Invalid studio name", 400);
       const { page = 1, per_page = 20 } = req.query;
       const cacheKey = `studio:${name}:${page}:${per_page}`;
 
       let result = getCached(cacheKey);
       if (!result) {
-        result = await anilist.getAnimeByStudio(decodeURIComponent(name), parseInt(page), parseInt(per_page));
+        result = await anilist.getAnimeByStudio(name, parseInt(page), parseInt(per_page));
         setCache(cacheKey, result, 300 * 1000);
       }
 
@@ -415,13 +424,14 @@ const createApiRoutes = (jsonResponse, jsonError, startTime) => {
   // ---- FEATURE: Anime by genre name ----
   router.get("/genre/:name", async (req, res) => {
     try {
-      const { name } = req.params;
+      const name = sanitizeString(decodeURIComponent(req.params.name));
+      if (!name) return jsonError(res, "Invalid genre name", 400);
       const { page = 1, per_page = 20 } = req.query;
       const cacheKey = `genre:${name}:${page}:${per_page}`;
 
       let result = getCached(cacheKey);
       if (!result) {
-        result = await anilist.filterAnime({ genre: decodeURIComponent(name), page: parseInt(page), perPage: parseInt(per_page) });
+        result = await anilist.filterAnime({ genre: name, page: parseInt(page), perPage: parseInt(per_page) });
         setCache(cacheKey, result, 120 * 1000);
       }
 
@@ -434,13 +444,14 @@ const createApiRoutes = (jsonResponse, jsonError, startTime) => {
   // ---- FEATURE: Anime by year ----
   router.get("/year/:year", async (req, res) => {
     try {
-      const { year } = req.params;
+      const year = sanitizeId(req.params.year);
+      if (!year) return jsonError(res, "Invalid year", 400);
       const { page = 1, per_page = 20 } = req.query;
       const cacheKey = `year:${year}:${page}:${per_page}`;
 
       let result = getCached(cacheKey);
       if (!result) {
-        result = await anilist.filterAnime({ year: parseInt(year), page: parseInt(page), perPage: parseInt(per_page) });
+        result = await anilist.filterAnime({ year, page: parseInt(page), perPage: parseInt(per_page) });
         setCache(cacheKey, result, 300 * 1000);
       }
 
@@ -453,7 +464,8 @@ const createApiRoutes = (jsonResponse, jsonError, startTime) => {
   // ---- FEATURE: Anime by status ----
   router.get("/status/:status", async (req, res) => {
     try {
-      const { status } = req.params;
+      const status = sanitizeString(req.params.status?.toUpperCase());
+      if (!status) return jsonError(res, "Invalid status", 400);
       const { page = 1, per_page = 20 } = req.query;
       const cacheKey = `status:${status}:${page}:${per_page}`;
 
@@ -472,7 +484,8 @@ const createApiRoutes = (jsonResponse, jsonError, startTime) => {
   // ---- FEATURE: Anime by format ----
   router.get("/format/:format", async (req, res) => {
     try {
-      const { format } = req.params;
+      const format = sanitizeString(req.params.format?.toUpperCase());
+      if (!format) return jsonError(res, "Invalid format", 400);
       const { page = 1, per_page = 20 } = req.query;
       const cacheKey = `format:${format}:${page}:${per_page}`;
 
@@ -495,8 +508,8 @@ const createApiRoutes = (jsonResponse, jsonError, startTime) => {
   // ---- FEATURE: Character detail with anime list ----
   router.get("/character/:id", async (req, res) => {
     try {
-      const id = parseInt(req.params.id);
-      if (isNaN(id)) return jsonError(res, "Invalid character ID", 400);
+      const id = sanitizeId(req.params.id);
+      if (!id) return jsonError(res, "Invalid character ID", 400);
 
       const cacheKey = `character:${id}`;
       let result = getCached(cacheKey);
@@ -515,8 +528,8 @@ const createApiRoutes = (jsonResponse, jsonError, startTime) => {
   // ---- FEATURE: Staff detail with anime list ----
   router.get("/staff/:id", async (req, res) => {
     try {
-      const id = parseInt(req.params.id);
-      if (isNaN(id)) return jsonError(res, "Invalid staff ID", 400);
+      const id = sanitizeId(req.params.id);
+      if (!id) return jsonError(res, "Invalid staff ID", 400);
 
       const cacheKey = `staff:${id}`;
       let result = getCached(cacheKey);
@@ -828,16 +841,20 @@ const createApiRoutes = (jsonResponse, jsonError, startTime) => {
         const genres = await anilist.getAllGenres();
         const stats = {};
 
-        // NOTE: Fetch top anime for each genre (limited to avoid rate limiting)
-        for (const genre of genres.slice(0, 10)) {
-          try {
-            const data = await anilist.filterAnime({ genre, perPage: 1 });
-            stats[genre] = {
+        const topGenres = genres.slice(0, 10);
+        const results = await Promise.allSettled(
+          topGenres.map((genre) =>
+            anilist.filterAnime({ genre, perPage: 1 }).then((data) => ({
+              genre,
               total: data.total,
               topAnime: data.results[0] || null,
-            };
-          } catch {
-            stats[genre] = { total: 0, topAnime: null };
+            })).catch(() => ({ genre, total: 0, topAnime: null }))
+          )
+        );
+
+        for (const r of results) {
+          if (r.status === "fulfilled") {
+            stats[r.value.genre] = { total: r.value.total, topAnime: r.value.topAnime };
           }
         }
 
@@ -863,7 +880,7 @@ const createApiRoutes = (jsonResponse, jsonError, startTime) => {
       let result = getCached(cacheKey);
       if (!result) {
         // NOTE: Get airing schedule for the month
-        const schedule = await anilist.getSchedule(1, 50);
+        const schedule = await anilist.getSchedule(1, 200);
         const monthStart = new Date(y, m - 1, 1);
         const monthEnd = new Date(y, m, 0, 23, 59, 59);
 
@@ -1106,7 +1123,7 @@ const createApiRoutes = (jsonResponse, jsonError, startTime) => {
       success: true,
       results: {
         status: "healthy",
-        version: "2.1.3",
+        version: "2.1.4",
         uptime: `${hours}h ${minutes}m ${seconds}s`,
         uptimeSeconds: uptime,
         timestamp: new Date().toISOString(),
@@ -1161,7 +1178,7 @@ const createApiRoutes = (jsonResponse, jsonError, startTime) => {
       info: {
         title: "MiruroAPI",
         description: "Free REST API for anime streaming data — AniList GraphQL + Miruro streaming providers",
-        version: "2.1.3",
+        version: "2.1.4",
         contact: { name: "Shineii86", url: "https://github.com/Shineii86/MiruroAPI" },
       },
       servers: [

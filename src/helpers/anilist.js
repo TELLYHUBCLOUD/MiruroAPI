@@ -538,7 +538,7 @@ const getSchedule = async (page = 1, perPage = 20) => {
  * @returns {Promise<object>} Paginated filtered results
  */
 const filterAnime = async ({
-  genre, tag, year, season, format, status,
+  search, genre, tag, year, season, format, status,
   sort = "POPULARITY_DESC", page = 1, perPage = 20,
 }) => {
   const SORT_MAP = {
@@ -548,13 +548,14 @@ const filterAnime = async ({
     START_DATE_DESC: "START_DATE_DESC",
     FAVOURITES_DESC: "FAVOURITES_DESC",
     UPDATED_AT_DESC: "UPDATED_AT_DESC",
+    SEARCH_MATCH: "SEARCH_MATCH",
   };
 
-  // NOTE: Build dynamic GraphQL arguments based on provided filters
   const args = ["type: ANIME", `sort: [${SORT_MAP[sort] || "POPULARITY_DESC"}]`];
   const variables = { page, perPage };
   const varTypes = ["$page: Int", "$perPage: Int"];
 
+  if (search) { args.push("search: $search"); variables.search = search; varTypes.push("$search: String"); }
   if (genre) { args.push("genre: $genre"); variables.genre = genre; varTypes.push("$genre: String"); }
   if (tag) { args.push("tag: $tag"); variables.tag = tag; varTypes.push("$tag: String"); }
   if (year) { args.push("seasonYear: $seasonYear"); variables.seasonYear = year; varTypes.push("$seasonYear: Int"); }
@@ -681,12 +682,13 @@ const getTrendingDaily = async (page = 1, perPage = 20) => {
 // ---- FEATURE: Weekly trending anime ----
 /**
  * Fetches currently trending anime (last 30 days).
+ * Returns more results than daily to cover a wider window.
  *
  * @param {number} [page=1] - Page number
- * @param {number} [perPage=20] - Results per page
+ * @param {number} [perPage=40] - Results per page (default 40, wider than daily)
  * @returns {Promise<object>} Paginated trending results
  */
-const getTrendingWeekly = async (page = 1, perPage = 20) => {
+const getTrendingWeekly = async (page = 1, perPage = 40) => {
   const gql = `
     query ($page: Int, $perPage: Int) {
       Page(page: $page, perPage: $perPage) {

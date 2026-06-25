@@ -88,11 +88,15 @@ app.use((req, res, next) => {
 // ---- FEATURE: Unified CORS middleware with preflight handling ----
 app.use((req, res, next) => {
   const origin = req.headers.origin;
-  if (
-    !allowedOrigins ||
-    allowedOrigins.includes("*") ||
-    (origin && allowedOrigins.includes(origin))
-  ) {
+  const isProduction = process.env.VERCEL || process.env.NODE_ENV === "production";
+
+  if (allowedOrigins && allowedOrigins.length > 0) {
+    if (allowedOrigins.includes("*") || (origin && allowedOrigins.includes(origin))) {
+      res.setHeader("Access-Control-Allow-Origin", origin || "*");
+    } else if (isProduction) {
+      return res.status(403).json({ success: false, message: "Origin not allowed" });
+    }
+  } else {
     res.setHeader("Access-Control-Allow-Origin", origin || "*");
   }
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
@@ -191,7 +195,8 @@ app.use((req, res, next) => {
   const ip =
     req.headers["x-forwarded-for"]?.split(",")[0]?.trim() ||
     req.ip ||
-    req.connection.remoteAddress;
+    req.connection?.remoteAddress ||
+    "unknown";
   const now = Date.now();
   const windowMs = 60000;
   const maxRequests = 100;
@@ -212,12 +217,11 @@ app.use((req, res, next) => {
 
   timestamps.push(now);
 
-  // NOTE: Periodic cleanup — prune expired IP entries when map grows large
-  if (requestCounts.size > 200) {
+  // NOTE: Aggressive cleanup on serverless — prune all empty entries every request
+  // since memory is per-invocation and doesn't persist
+  if (requestCounts.size > 50) {
     for (const [key, val] of requestCounts) {
-      if (val.filter((t) => now - t < windowMs).length === 0) {
-        requestCounts.delete(key);
-      }
+      if (val.length === 0) requestCounts.delete(key);
     }
   }
 
@@ -265,7 +269,7 @@ app.use((req, res) => {
 
 if (!process.env.VERCEL) {
   app.listen(PORT, () => {
-    console.log(`[${new Date().toISOString()}] MiruroAPI v2.1.0 listening at ${PORT}`);
+    console.log(`[${new Date().toISOString()}] MiruroAPI v2.1.4 listening at ${PORT}`);
   });
 }
 

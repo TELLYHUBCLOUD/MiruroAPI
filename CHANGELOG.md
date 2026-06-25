@@ -1,5 +1,32 @@
 # Changelog
 
+## v2.1.4
+### Security Hardening, Bug Fixes, Code Quality Improvements
+
+#### Security
+- **XOR keys moved to env vars** — `PRU_PROXY_KEY` and `PIPE_OBF_KEY` no longer hardcoded in source (proxy.js, pipe.js)
+- **CORS restricted in production** — returns 403 when `ALLOWED_ORIGINS` is set and origin doesn't match
+- **Input sanitization** — new `sanitizeId()` and `sanitizeString()` helpers applied to all route params (character, staff, studio, genre, year, status, format, season)
+- **Security headers in vercel.json** — added at CDN level for faster response
+
+#### Bug Fixes
+- **multi-search** — now actually combines query + filters (was ignoring `q` when filters present)
+- **`filterAnime`** — added `search` parameter and `SEARCH_MATCH` sort option
+- **`getTrendingWeekly`** — now returns 40 results (was identical to daily with 20)
+- **`calendar`** — fetches 200 results instead of 50 (was missing late-month shows)
+- **`getBestStream`** — improved quality matching (checks quality/label fields), supports HLS+DASH, better fallback
+- **`deepTranslate`** — now returns deep clone instead of mutating in-place (prevents cache corruption)
+- **Version strings** — updated to 2.1.3 in server.js and test.js
+
+#### Code Quality
+- **Deleted `server.py`** — dead Flask code, not used on Vercel
+- **Rate limiter** — aggressive cleanup on serverless (prunes empty entries every request)
+- **`stats/genre`** — uses `Promise.allSettled` for parallel execution (faster, safer)
+
+#### Config
+- **vercel.json** — added security headers at CDN level
+- **.env.example** — added `PRU_PROXY_KEY`, `PIPE_OBF_KEY` documentation
+
 ## v2.1.3
 ### Diagnostic Sweep — Bug fixes, security, AniList query corrections
 

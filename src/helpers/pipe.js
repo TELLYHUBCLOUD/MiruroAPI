@@ -73,7 +73,10 @@ const encodePipeRequest = (payload) => {
  *
  * @type {Buffer}
  */
-const PIPE_OBF_KEY = Buffer.from("71951034f8fbcf53d89db52ceb3dc22c", "hex");
+const PIPE_OBF_KEY = Buffer.from(
+  process.env.PIPE_OBF_KEY || "71951034f8fbcf53d89db52ceb3dc22c",
+  "hex"
+);
 
 /**
  * @param {string} encodedStr - The base64url-encoded response
@@ -227,23 +230,28 @@ const translateId = (encodedId) => {
  * Walks a JSON structure and decodes any base64 "id" fields.
  * Saves the original base64 value in a `rawPipeId` field on episode objects
  * so the pipe sources endpoint can be called directly from the client.
+ * Returns a deep clone — does not mutate the original object.
  *
- * @param {object|Array} obj - The object or process
- * @returns {object|Array} The same object with decoded IDs (mutated in place)
+ * @param {object|Array} obj - The object or array to process
+ * @returns {object|Array} A new object with decoded IDs
  */
 const deepTranslate = (obj) => {
   if (obj && typeof obj === "object") {
-    for (const key of Object.keys(obj)) {
-      if (key === "id" && typeof obj[key] === "string") {
-        // NOTE: Save original base64 before decoding (needed for pipe sources call)
-        if (obj.number !== undefined) {
-          obj.rawPipeId = obj[key];
+    if (Array.isArray(obj)) {
+      return obj.map((item) => deepTranslate(item));
+    }
+    const clone = { ...obj };
+    for (const key of Object.keys(clone)) {
+      if (key === "id" && typeof clone[key] === "string") {
+        if (clone.number !== undefined) {
+          clone.rawPipeId = clone[key];
         }
-        obj[key] = translateId(obj[key]);
-      } else if (typeof obj[key] === "object") {
-        deepTranslate(obj[key]);
+        clone[key] = translateId(clone[key]);
+      } else if (typeof clone[key] === "object") {
+        clone[key] = deepTranslate(clone[key]);
       }
     }
+    return clone;
   }
   return obj;
 };
@@ -503,10 +511,14 @@ const extractSkipTimes = (sources) => {
  * @returns {object|null} Best available stream object or null
  */
 const getBestStream = (sources, preferredQuality = "1080p") => {
-  const streams = (sources.streams || []).filter((s) => s.type === "hls" && s.url);
+  const streams = (sources.streams || []).filter((s) => s.url);
   if (streams.length === 0) return null;
 
-  // NOTE: Try preferred quality first, then fallback
+  const hlsStreams = streams.filter((s) => s.type === "hls" || !s.type || s.url?.endsWith(".m3u8") || s.url?.includes("m3u8"));
+  const dashStreams = streams.filter((s) => s.type === "dash" || s.url?.endsWith(".mpd"));
+
+  const usable = hlsStreams.length > 0 ? hlsStreams : streams;
+
   const qualityOrder = ["1080p", "720p", "480p", "360p"];
   const startIdx = qualityOrder.indexOf(preferredQuality);
   const ordered = startIdx >= 0
@@ -514,15 +526,17 @@ const getBestStream = (sources, preferredQuality = "1080p") => {
     : qualityOrder;
 
   for (const q of ordered) {
-    const match = streams.find((s) => s.quality === q);
+    const match = usable.find((s) => {
+      const quality = (s.quality || s.label || "").toLowerCase();
+      return quality.includes(q);
+    });
     if (match) return match;
   }
 
-  // NOTE: Some providers don't include quality — return first active HLS stream, or first HLS stream
-  const active = streams.find((s) => s.isActive);
+  const active = usable.find((s) => s.isActive);
   if (active) return active;
 
-  return streams[0];
+  return usable[0];
 };
 
 // ══════════════════════════════════════════════════════════════
