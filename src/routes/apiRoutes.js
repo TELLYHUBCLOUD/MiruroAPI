@@ -320,8 +320,9 @@ const createApiRoutes = (jsonResponse, jsonError, startTime) => {
   // ---- FEATURE: Random anime of the day ----
   router.get("/random", async (req, res) => {
     try {
-      // NOTE: Get random page from trending to ensure variety
-      const randomPage = Math.floor(Math.random() * 50) + 1;
+      // NOTE: Use crypto for better randomness in serverless + wider range for variety
+      const crypto = require("crypto");
+      const randomPage = crypto.randomInt(1, 500);
       const data = await anilist.getCollection("POPULARITY_DESC", null, randomPage, 1);
       const anime = data.results[0];
 
@@ -505,7 +506,8 @@ const createApiRoutes = (jsonResponse, jsonError, startTime) => {
 
       jsonResponse(res, result);
     } catch (err) {
-      jsonError(res, err.message);
+      const status = err.message.includes("not found") ? 404 : 500;
+      jsonError(res, err.message, status);
     }
   });
 
@@ -524,7 +526,8 @@ const createApiRoutes = (jsonResponse, jsonError, startTime) => {
 
       jsonResponse(res, result);
     } catch (err) {
-      jsonError(res, err.message);
+      const status = err.message.includes("not found") ? 404 : 500;
+      jsonError(res, err.message, status);
     }
   });
 

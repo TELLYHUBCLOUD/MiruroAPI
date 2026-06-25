@@ -609,7 +609,7 @@ const getAllGenres = async () => {
 const getAllTags = async () => {
   const gql = `query { MediaTagCollection { name description category isGeneralSpoiler isMediaSpoiler isAdult } }`;
   const data = await anilistQuery(gql);
-  return data.TagCollection;
+  return data.MediaTagCollection;
 };
 
 // ══════════════════════════════════════════════════════════════
