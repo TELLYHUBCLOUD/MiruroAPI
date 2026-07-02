@@ -27,23 +27,57 @@ const { getCached, setCache } = require("./cache");
 // ══════════════════════════════════════════════════════════════
 
 /**
- * Miruro's secure pipe endpoint URL.
- * All streaming requests go through this base64+gzip encoded tunnel.
+ * Miruro's secure pipe endpoint path (same-origin relative on every mirror).
+ * The pipe tunnel uses base64+gzip (and optionally XOR) encoded request/response.
  *
  * @type {string}
  */
-const MIRURO_PIPE_URL = "https://www.miruro.tv/api/secure/pipe";
+const PIPE_PATH = "/api/secure/pipe";
 
 /**
- * Request headers mimicking a browser.
- * Referer is required for the pipe endpoint to accept requests.
+ * Ordered list of Miruro mirror origins that host the secure pipe endpoint.
+ * Miruro rotates domains frequently and sits behind Cloudflare bot protection,
+ * so we try them in order and rotate to the next on any block/reset.
+ * `.ru` currently serves the pipe with the lightest Cloudflare friction;
+ * `.to` is the canonical origin referenced in CORS headers.
+ *
+ * @type {string[]}
+ */
+const MIRURO_ORIGINS = [
+  "https://www.miruro.ru",
+  "https://www.miruro.to",
+  "https://www.miruro.bz",
+  "https://www.miruro.tv",
+];
+
+/**
+ * Canonical origin used for the Referer/Origin headers (matches the
+ * `access-control-allow-origin` the pipe returns).
+ *
+ * @type {string}
+ */
+const CANONICAL_ORIGIN = "https://www.miruro.to";
+
+/**
+ * Request headers mimicking a real browser. The pipe endpoint sits behind
+ * Cloudflare, which inspects UA + sec-fetch + Accept headers, so these must
+ * look like a genuine same-origin browser request.
  *
  * @type {object}
  */
 const HEADERS = {
-  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
-  Referer: "https://www.miruro.tv/",
-  Origin: "https://www.miruro.tv",
+  "User-Agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
+  Accept: "*/*",
+  "Accept-Language": "en-US,en;q=0.9",
+  "sec-ch-ua": '"Chromium";v="137", "Not?A_Brand";v="24"',
+  "sec-ch-ua-mobile": "?0",
+  "sec-ch-ua-platform": '"Windows"',
+  "sec-fetch-dest": "empty",
+  "sec-fetch-mode": "cors",
+  "sec-fetch-site": "same-origin",
+  Referer: CANONICAL_ORIGIN + "/",
+  Origin: CANONICAL_ORIGIN,
 };
 
 // ══════════════════════════════════════════════════════════════
@@ -66,10 +100,11 @@ const encodePipeRequest = (payload) => {
   return Buffer.from(json).toString("base64url");
 };
 
-// ---- FEATURE: Decode base64+gzip pipe response ----
+// ---- FEATURE: XOR obfuscation key for pipe responses (x-obfuscated: 2) ----
 /**
- * Decodes a pipe response from base64url + XOR obfuscation + gzip format.
- * The Miruro pipe returns all responses XORed with PIPE_OBF_KEY then gzipped.
+ * XOR key applied to pipe responses when the server returns the
+ * `x-obfuscated: 2` header. Loaded from PIPE_OBF_KEY with hardcoded fallback.
+ * Key length: 16 bytes (32 hex chars).
  *
  * @type {Buffer}
  */
@@ -78,32 +113,54 @@ const PIPE_OBF_KEY = Buffer.from(
   "hex"
 );
 
+// ---- FEATURE: Decode pipe response (header-driven obfuscation scheme) ----
 /**
- * @param {string} encodedStr - The base64url-encoded response
+ * Decodes a pipe response based on the `x-obfuscated` response header.
+ *
+ * Obfuscation schemes (matches the Miruro frontend's secure client):
+ *   - no header / falsy  → body is plain JSON text
+ *   - "1"                → body is base64url( gzip( json ) )   (no XOR)
+ *   - "2"                → body is base64url( XOR( gzip( json ) ) ) with PIPE_OBF_KEY
+ *
+ * @param {string} encodedStr - The raw response body text
+ * @param {string|null} [obfHeader] - Value of the `x-obfuscated` response header
  * @returns {object} Decoded JSON object
  * @throws {Error} If decoding or decompression fails
  */
-const decodePipeResponse = (encodedStr) => {
+const decodePipeResponse = (encodedStr, obfHeader = null) => {
   try {
-    const padded = encodedStr + "=".repeat((4 - (encodedStr.length % 4)) % 4);
+    // NOTE: No obfuscation header → the body is plain JSON
+    if (!obfHeader) return JSON.parse(encodedStr);
+
+    const padded =
+      encodedStr + "=".repeat((4 - (encodedStr.length % 4)) % 4);
     const raw = Buffer.from(padded, "base64url");
-    // NOTE: XOR decode with obfuscation key before gzip decompression
-    const xored = Buffer.alloc(raw.length);
-    for (let i = 0; i < raw.length; i++) {
-      xored[i] = raw[i] ^ PIPE_OBF_KEY[i % PIPE_OBF_KEY.length];
+
+    // NOTE: Scheme "2" XORs the base64-decoded bytes with PIPE_OBF_KEY before gunzip
+    let bytes = raw;
+    if (String(obfHeader) === "2") {
+      const xored = Buffer.alloc(raw.length);
+      for (let i = 0; i < raw.length; i++) {
+        xored[i] = raw[i] ^ PIPE_OBF_KEY[i % PIPE_OBF_KEY.length];
+      }
+      bytes = xored;
     }
-    const decompressed = zlib.gunzipSync(xored);
+
+    const decompressed = zlib.gunzipSync(bytes);
     return JSON.parse(decompressed.toString("utf-8"));
   } catch (e) {
     throw new Error("Failed to decode pipe response: " + e.message);
   }
 };
 
-// ---- FEATURE: Pipe request with retry and exponential backoff ----
+// ---- FEATURE: Pipe request with mirror rotation + exponential backoff ----
 /**
- * Makes a pipe API request with retry logic and exponential backoff.
- * The pipe endpoint intermittently rate-limits (444/connection reset) from datacenter IPs.
- * Retries up to 3 times with increasing delays (1s, 2s, 4s).
+ * Makes a pipe API request, rotating across Miruro mirrors on block/reset
+ * and retrying with exponential backoff.
+ *
+ * Miruro's pipe sits behind Cloudflare bot protection which intermittently
+ * returns 403/444 or resets connections from datacenter IPs, so each retry
+ * targets the next mirror origin and honors a short backoff.
  *
  * @param {string} path - Pipe path ("episodes" or "sources")
  * @param {object} query - Query parameters for the pipe
@@ -111,28 +168,39 @@ const decodePipeResponse = (encodedStr) => {
  * @returns {Promise<object>} Decoded pipe response
  * @throws {Error} If all retries fail
  */
-const pipeRequest = async (path, query, maxRetries = 3) => {
-  const payload = { path, method: "GET", query, body: null, version: "0.2.0" };
+const pipeRequest = async (path, query, maxRetries = 4) => {
+  const payload = { path, method: "GET", query, body: null };
   const encodedReq = encodePipeRequest(payload);
 
   let lastError;
   for (let attempt = 0; attempt < maxRetries; attempt++) {
+    // NOTE: Rotate mirror on every attempt to spread Cloudflare pressure
+    const origin = MIRURO_ORIGINS[attempt % MIRURO_ORIGINS.length];
+
     try {
-      const res = await axios.get(`${MIRURO_PIPE_URL}?e=${encodedReq}`, {
+      const res = await axios.get(`${origin}${PIPE_PATH}?e=${encodedReq}`, {
         headers: HEADERS,
         timeout: 20000,
         maxRedirects: 5,
       });
 
       if (res.status !== 200) throw new Error(`Pipe request failed: ${res.status}`);
-      return decodePipeResponse(res.text || res.data);
+
+      // NOTE: Decode using the server's x-obfuscated scheme header
+      const obf = res.headers["x-obfuscated"];
+      return decodePipeResponse(res.data, obf);
     } catch (e) {
       lastError = e;
       const status = e.response?.status;
-      // NOTE: Don't retry on non-retryable errors (4xx except 444)
-      if (status && status >= 400 && status < 500 && status !== 444) {
+
+      // NOTE: Rotate mirror on Cloudflare blocks / resets (403, 444, conn reset).
+      // 4xx (except 444) are not retryable on the same mirror, but rotating
+      // to another mirror may still succeed, so we only hard-fail on 4xx
+      // when we've exhausted all mirrors.
+      if (status && status >= 400 && status < 500 && status !== 444 && status !== 403) {
         throw new Error(`Pipe request failed with status ${status}`);
       }
+
       // NOTE: Exponential backoff: 1s, 2s, 4s
       if (attempt < maxRetries - 1) {
         const delay = Math.pow(2, attempt) * 1000;
@@ -195,7 +263,7 @@ const proxySubtitles = (sources) => {
   sources.subtitles = sources.subtitles.map((s) => {
     const raw = s.url || s.file;
     if (!raw || !raw.startsWith("http")) return s;
-    const proxied = proxyUrl(raw, "https://www.miruro.tv/");
+    const proxied = proxyUrl(raw, "https://www.miruro.to/");
     return { ...s, url: proxied, file: proxied };
   });
   return sources;

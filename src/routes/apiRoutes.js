@@ -1123,7 +1123,7 @@ const createApiRoutes = (jsonResponse, jsonError, startTime) => {
       success: true,
       results: {
         status: "healthy",
-        version: "2.1.4",
+        version: "2.2.0",
         uptime: `${hours}h ${minutes}m ${seconds}s`,
         uptimeSeconds: uptime,
         timestamp: new Date().toISOString(),
@@ -1178,7 +1178,7 @@ const createApiRoutes = (jsonResponse, jsonError, startTime) => {
       info: {
         title: "MiruroAPI",
         description: "Free REST API for anime streaming data — AniList GraphQL + Miruro streaming providers",
-        version: "2.1.4",
+        version: "2.2.0",
         contact: { name: "Shineii86", url: "https://github.com/Shineii86/MiruroAPI" },
       },
       servers: [

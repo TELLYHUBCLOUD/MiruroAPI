@@ -209,7 +209,7 @@ module.exports = async function handler(req, res) {
     const decoded = decodePruUrl(url);
     const isPru = !!decoded;
     const targetUrl = decoded ? decoded.url : url;
-    const targetReferer = decoded ? decoded.referer : referer || "https://www.miruro.tv/";
+    const targetReferer = decoded ? decoded.referer : referer || "https://www.miruro.to/";
 
     let fetchUrl;
     let fetchHeaders;
@@ -219,8 +219,8 @@ module.exports = async function handler(req, res) {
       fetchUrl = encodeForPru(targetUrl, targetReferer);
       fetchHeaders = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
-        Referer: "https://www.miruro.tv/",
-        Origin: "https://www.miruro.tv",
+        Referer: "https://www.miruro.to/",
+        Origin: "https://www.miruro.to",
       };
     } else {
       fetchUrl = targetUrl;

@@ -1,5 +1,36 @@
 # Changelog
 
+## v2.2.0
+### Critical Fix — Miruro Pipe Protocol Migration (Streaming Endpoints Restored)
+
+#### Diagnostic Summary
+- **Full diagnostic sweep** of all live `/api/*` endpoints against `mirurotvapi.vercel.app`
+- **AniList-backed endpoints** (`/search`, `/trending`, `/info`, `/popular`, `/top`, …) — confirmed **all 200/healthy**
+- **Streaming endpoints** (`/episodes`, `/sources`, `/stream`, `/watch`, `/download`) — **all 500**
+- Deep-scanned the Miruro frontend (`miruro.to/.bz/.ru`) bundles + `env2.js` to reverse-engineer the new pipe contract
+
+#### Root Cause (streaming failure)
+1. **Dead data source** — `pipe.js` targeted `https://www.miruro.tv/api/secure/pipe`, which is now hard-blocked by Cloudflare (returns 403 "Sorry, you have been blocked" page).
+2. **Stale decode protocol** — the old `decode()` always did `base64url → XOR(PIPE_OBF_KEY) → gunzip`. Miruro's pipe now **signals the scheme via a response header**:
+   - `x-obfuscated` absent → plain JSON
+   - `x-obfuscated: 1` → `base64url(gzip(json))` (**no XOR**)
+   - `x-obfuscated: 2` → `base64url(XOR(gzip(json)))` with `PIPE_OBF_KEY`
+   - The hard-coded always-XOR decode corrupted the new `:1` payloads.
+
+#### Fixes
+- **`src/helpers/pipe.js`**
+  - New **mirror rotation** list: `miruro.ru` → `miruro.to` → `miruro.bz` → `miruro.tv`, iterating one mirror per retry.
+  - **New header-driven `decodePipeResponse(text, obfHeader)`** supporting plain / scheme-1 / scheme-2.
+  - **Browser-accurate request headers** (UA + `Accept`, `Accept-Language`, full `sec-ch-ua` / `sec-fetch-*` family) to pass Cloudflare bot fingerprinting rather than just UA+Referer.
+  - Request payload reverted to **plain base64url of the JSON** (no XOR on the request) matching the current client.
+  - Subtitle-proxy referer updated to canonical `https://www.miruro.to/`.
+  - Default `maxRetries` bumped 3 → 4 so each mirror gets an attempt; 403/444 now rotate instead of failing.
+- **`api/proxy.js`** — default CDN referer/Origin switched from the dead `miruro.tv` to the canonical `miruro.to`.
+- **Version bump** to `2.2.0` across `package.json`, `server.js` banner, `/api/health`, `/api/openapi`, and `public/openapi.json`.
+
+#### Notes
+- Streaming endpoints depend on Miruro's upstream pipe, which sits behind Cloudflare bot protection and may intermittently rate-limit datacenter egress IPs. The new rotation + browser headers + retry logic maximizes success; AniList endpoints are unaffected and remain fully healthy.
+
 ## v2.1.4
 ### Security Hardening, Bug Fixes, Code Quality Improvements
 
