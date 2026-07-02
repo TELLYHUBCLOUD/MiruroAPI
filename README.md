@@ -19,8 +19,8 @@
   <img src="https://img.shields.io/badge/AniList-GraphQL-02A6E4?style=flat-square&logo=graphql&logoColor=white" alt="AniList GraphQL"/>
   <img src="https://img.shields.io/badge/Vercel-Serverless-000000?style=flat-square&logo=vercel&logoColor=white" alt="Vercel"/>
   <img src="https://img.shields.io/badge/License-MIT-22c55e?style=flat-square&logo=mit&logoColor=white" alt="License"/>
-  <img src="https://img.shields.io/badge/Version-2.1.4-f43f8e?style=flat-square&logoColor=white" alt="Version"/>
-  <img src="https://img.shields.io/badge/Endpoints-44-6366f1?style=flat-square&logoColor=white" alt="Endpoints"/>
+  <img src="https://img.shields.io/badge/Version-2.3.0-f43f8e?style=flat-square&logoColor=white" alt="Version"/>
+  <img src="https://img.shields.io/badge/Endpoints-46-6366f1?style=flat-square&logoColor=white" alt="Endpoints"/>
   <img src="https://img.shields.io/badge/Providers-12-a855f7?style=flat-square&logoColor=white" alt="Providers"/>
 </p>
 
@@ -44,7 +44,7 @@
 > [!WARNING]
 > 1. This `API` does not store any files — it only links to media hosted on 3rd party services.
 > 2. This `API` is explicitly made for **educational purposes only** and not for commercial usage. This repo will not be responsible for any misuse of it.
-> 3. All anime data, images, and content belong to their respective owners (AniList, Miruro). This project is not affiliated with miruro.tv.
+> 3. All anime data, images, and content belong to their respective owners (AniList, Miruro). This project is not affiliated with Miruro.
 
 ---
 
@@ -84,7 +84,7 @@
 
 ### Why MiruroAPI?
 
-- 🎬 **44 Endpoints** — Complete anime data coverage
+- 🎬 **46 Endpoints** — Complete anime data coverage
 - 🔍 **Full-Text Search** — Search anime by keyword with suggestions
 - 🎭 **Characters & Voice Actors** — Full character data from AniList
 - 🎯 **Advanced Filtering** — Genre, year, season, format, sort
@@ -98,6 +98,15 @@
 - 🔒 **CORS Enabled** — Works from any frontend, no proxy needed
 - 🚀 **Zero-Config Deploy** — One click to Vercel, or run standalone with Express
 
+### 🔄 Self-Healing System (v2.3.0)
+
+When Cloudflare blocks streaming requests, the API automatically tries fallback methods:
+- **Direct** → Mirror rotation across 4 domains
+- **ScraperAPI** → Free proxy bypass (1K req/month)
+- **FlareSolverr** → Self-hosted browser proxy
+
+Zero-config: works out of the box. Add `SCRAPER_API_KEY` env var for automatic Cloudflare bypass.
+
 ### How It Works
 
 ```mermaid
@@ -108,7 +117,7 @@ flowchart TD
     C -- MISS --> E{"🔍 Which Source?"}
 
     E -- Metadata --> F["📡 AniList GraphQL<br/>graphql.anilist.co"]
-    E -- Streaming --> G["📺 Miruro Pipe<br/>miruro.tv/api/secure/pipe"]
+    E -- Streaming --> G["📺 Miruro Pipe<br/>miruro.{to,ru,bz,tv}/api/secure/pipe"]
 
     F --> H["AniList Response<br/>JSON"]
     G --> I["Pipe Response<br/>base64url + gzip"]
@@ -222,10 +231,10 @@ flowchart TD
 
 | Source | Domain | Data |
 |:---|:---|:---|
-| 📺 **Miruro** | `miruro.tv` | Episodes, streaming sources (M3U8 URLs) |
-| 📺 **Miruro** | `miruro.to` | Mirror domain |
-| 📺 **Miruro** | `miruro.bz` | Mirror domain |
+| 📺 **Miruro** | `miruro.to` | Episodes, streaming sources (M3U8 URLs) |
 | 📺 **Miruro** | `miruro.ru` | Mirror domain |
+| 📺 **Miruro** | `miruro.bz` | Mirror domain |
+| 📺 **Miruro** | `miruro.tv` | Mirror domain |
 
 ### 🎬 Streaming Providers
 
@@ -494,7 +503,7 @@ console.log(resp.data);
   "success": true,
   "results": {
     "status": "healthy",
-    "version": "2.1.4",
+    "version": "2.3.0",
     "uptime": "0h 0m 34s",
     "uptimeSeconds": 34,
     "timestamp": "2026-06-09T09:55:00.884Z",
@@ -1412,6 +1421,7 @@ docker run -p 3000:3000 miruroapi
 
 | Version | Date | Key Changes |
 |:---|:---|:---|
+| **2.3.0** | 2026-07-02 | Self-healing fallback system — multi-method pipe recovery, /api/pipe-health endpoint, ScraperAPI + FlareSolverr support |
 | **2.1.4** | 2026-06-25 | Security hardening — XOR keys to env vars, CORS restriction, input sanitization, bug fixes (multi-search, deepTranslate, getBestStream) |
 | **2.1.3** | 2026-06-25 | Diagnostic sweep — tags, random, character/staff 404 fixes, pipe retry with backoff, security headers |
 | **2.1.2** | 2026-06-25 | Streaming architecture — pru proxy decode, CDN CORS proxy, raw stream URLs |
@@ -1607,7 +1617,7 @@ git push origin feature/amazing-feature
 | Source | About |
 |:---|:---|
 | [AniList](https://anilist.co) | Anime metadata API (GraphQL) |
-| [Miruro](https://miruro.tv) | Anime streaming site — source for episodes and streaming |
+| [Miruro](https://www.miruro.to) | Anime streaming site — source for episodes and streaming |
 | [Miruro TO](https://miruro.to) | Mirror domain |
 | [Miruro BZ](https://miruro.bz) | Mirror domain |
 | [Miruro RU](https://miruro.ru) | Mirror domain |

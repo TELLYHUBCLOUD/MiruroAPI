@@ -234,5 +234,14 @@ const dubEps = kiwi.dub;  // [{ id: "watch/kiwi/20/dub/...", ... }]
 |-------|----------|
 | "No episodes found" | Check the AniList ID is correct (use `/api/search` first) |
 | "No providers" | The anime may not be available on any provider |
-| Stream URL 403 | Some servers require specific referrer headers |
+| Stream URL 403 | Some servers require specific referrer headers — the self-healing system auto-rotates mirrors |
 | CORS error | Use a proxy or access from server-side |
+
+## Self-Healing Fallback (v2.3.0)
+
+When Cloudflare blocks streaming requests, the API automatically tries fallback methods:
+- **Direct** → Mirror rotation across 4 domains (miruro.to, miruro.ru, miruro.bz, miruro.tv)
+- **ScraperAPI** → Free proxy bypass (1K req/month, set `SCRAPER_API_KEY` env var)
+- **FlareSolverr** → Self-hosted browser proxy for full Cloudflare bypass
+
+Check the fallback system status: `GET /api/pipe-health`

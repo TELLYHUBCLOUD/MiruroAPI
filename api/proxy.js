@@ -120,7 +120,7 @@ const decodePruUrl = (pruUrl) => {
  * @returns {string} Full PRU proxy URL
  *
  * @example
- *   const pruUrl = encodeForPru("https://cdn.example.com/v.m3u8", "https://miruro.tv/");
+ *   const pruUrl = encodeForPru("https://cdn.example.com/v.m3u8", "https://miruro.to/");
  */
 const encodeForPru = (rawUrl, referer) => {
   const urlEnc = base64urlXor(rawUrl);
@@ -189,7 +189,7 @@ const rewriteM3U8 = (m3u8, targetReferer) => {
  * @query {string} referer - Optional referer header for the target
  *
  * @example
- *   GET /api/proxy?url=https://example.com/video.m3u8&referer=https://miruro.tv/
+ *   GET /api/proxy?url=https://example.com/video.m3u8&referer=https://miruro.to/
  */
 module.exports = async function handler(req, res) {
   // NOTE: CORS headers for browser requests

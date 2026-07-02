@@ -1138,7 +1138,7 @@ const createApiRoutes = (jsonResponse, jsonError, startTime) => {
           size: require("../helpers/cache").getCacheSize(),
           maxSize: 100,
         },
-        endpoints: 36,
+        endpoints: 46,
         providers: ["kiwi", "pewe", "bee", "bonk", "bun", "ally", "nun", "twin", "cog", "moo", "hop", "telli"],
       },
     });
@@ -1198,7 +1198,7 @@ const createApiRoutes = (jsonResponse, jsonError, startTime) => {
           currentSize: require("../helpers/cache").getCacheSize(),
           description: "Map-based cache with TTL expiration and FIFO eviction",
         },
-        endpoints: 36,
+        endpoints: 46,
         timestamp: new Date().toISOString(),
       },
     });

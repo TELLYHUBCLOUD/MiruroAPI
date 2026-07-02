@@ -62,7 +62,7 @@ MiruroAPI/
 | Runtime | Node.js |
 | Framework | Express.js |
 | Metadata | AniList GraphQL (`graphql.anilist.co`) |
-| Streaming | Miruro pipe (`miruro.tv/api/secure/pipe`) |
+| Streaming | Miruro pipe (`miruro.{to,ru,bz,tv}/api/secure/pipe`) |
 | Deployment | Vercel (Serverless) |
 | Caching | In-memory Map with 1-5 min TTL |
 | Static Files | Express static middleware |
@@ -120,10 +120,20 @@ Play M3U8 in HLS player (hls.js, video.js, native)
 
 ### Miruro Pipe
 
-- **Endpoint:** `https://miruro.tv/api/secure/pipe`
+- **Endpoint:** `https://miruro.{to,ru}/api/secure/pipe`
 - **Data:** Episodes, streaming sources (M3U8 URLs)
 - **Encoding:** Base64url + gzip compressed request/response
 - **Providers:** kiwi, pewe, bee, bonk, bun, ally, nun, twin, cog, moo, hop, telli
+
+## Self-Healing Fallback System (v2.3.0)
+
+When Cloudflare blocks streaming requests, the API automatically tries fallback methods in order:
+
+1. **Direct** → Mirror rotation across 4 domains (miruro.to, miruro.ru, miruro.bz, miruro.tv)
+2. **ScraperAPI** → Free proxy bypass via ScraperAPI (1K req/month, requires `SCRAPER_API_KEY`)
+3. **FlareSolverr** → Self-hosted browser proxy for full Cloudflare bypass
+
+The system tracks success/failure rates per method and auto-rotates to the most reliable option. Check status via `/api/pipe-health`.
 
 ## Vercel Configuration
 

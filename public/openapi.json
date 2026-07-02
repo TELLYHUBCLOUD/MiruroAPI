@@ -434,6 +434,12 @@
         "summary": "Health check"
       }
     },
+    "/api/pipe-health": {
+      "get": {
+        "tags": ["System"],
+        "summary": "Pipe fallback method health check"
+      }
+    },
     "/api/stats": {
       "get": {
         "tags": ["System"],

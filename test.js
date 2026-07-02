@@ -4,8 +4,8 @@
  * Repository: https://github.com/Shineii86/MiruroAPI
  *
  * @description
- *   Integration test suite for MiruroAPI v2.1.4 endpoints.
- *   Tests all 44 endpoints for correct response format.
+ *   Integration test suite for MiruroAPI v2.3.0 endpoints.
+ *   Tests all 45 endpoints for correct response format.
  *   Runs sequentially to avoid rate limiting.
  *
  * @author  Shinei Nouzen
@@ -152,7 +152,7 @@ async function runTest(test) {
  *   API_URL=http://localhost:3000/api node test.js  # Run against local
  */
 async function runAll() {
-  console.log(`\n🧪 MiruroAPI v2.1.4 — Running ${tests.length} tests...\n`);
+  console.log(`\n🧪 MiruroAPI v2.3.0 — Running ${tests.length} tests...\n`);
 
   // NOTE: Sequential execution — parallel requests would hit rate limiter
   for (const test of tests) {

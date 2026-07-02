@@ -1,6 +1,6 @@
 # MiruroAPI Documentation
 
-> Free REST API for anime streaming data. 18 endpoints, 12 providers, M3U8 URLs. No API key required.
+> Free REST API for anime streaming data. 46 endpoints, 12 providers, M3U8 URLs. No API key required.
 
 ## Overview
 
@@ -48,7 +48,7 @@ curl "https://mirurotvapi.vercel.app/api/episodes/20"
 
 ## Features
 
-- **18 Endpoints** — Search, info, episodes, streaming, characters, relations, and more
+- **46 Endpoints** — Search, info, episodes, streaming, characters, relations, and more
 - **12 Streaming Providers** — M3U8 URLs with resolution, codec, fansub info
 - **No API Key** — Just make requests, no registration needed
 - **In-Memory Cache** — 1-5 minute TTL for fast responses

@@ -1,6 +1,6 @@
 # API Endpoints Reference
 
-Complete documentation for all 35 MiruroAPI v2.0.1 endpoints.
+Complete documentation for all 45 MiruroAPI v2.3.0 endpoints.
 
 ---
 
@@ -591,16 +591,26 @@ API health status, version, uptime, memory, cache stats.
   "success": true,
   "results": {
     "status": "healthy",
-    "version": "2.0.0",
+    "version": "2.3.0",
     "uptime": "0h 0m 34s",
     "node": "v24.14.1",
     "memory": { "used": "13MB", "total": "15MB", "rss": "25MB" },
     "cache": { "size": 12, "maxSize": 100 },
-    "endpoints": 35,
+    "endpoints": 45,
     "providers": ["kiwi","pewe","bee","bonk","bun","ally","nun","twin","cog","moo","hop","telli"]
   }
 }
 ```
+
+---
+
+## Pipe Health
+
+```
+GET /api/pipe-health
+```
+
+Returns the status of the self-healing fallback system — mirror availability, ScraperAPI/FlareSolverr status, and last successful method.
 
 ---
 
