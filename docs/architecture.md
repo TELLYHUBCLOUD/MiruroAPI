@@ -202,14 +202,17 @@ Error responses:
 
 ## Cloudflare Worker Architecture (v2.3.1)
 
-The Worker edition (`worker.js`) runs the same API on Cloudflare's edge network. Key difference: **streaming endpoints work** because edge-to-edge requests bypass Cloudflare bot detection.
+The Worker edition (`worker.js`) runs the same API on Cloudflare's edge network. **⚠️ Experimental** — testing shows that both AniList and Miruro block CF Worker IPs (HTTP 403).
 
-### Why Workers Work
+### Why Workers Don't Work (Current)
 
 ```
 Vercel (datacenter IP) → miruro.to → Cloudflare WAF → 403 Blocked
-Cloudflare Worker (edge) → miruro.to → Cloudflare internal network → 200 OK
+Cloudflare Worker (edge) → miruro.to → Cloudflare bot detection → 403 Blocked
+Cloudflare Worker (edge) → graphql.anilist.co → AniList blocks worker IPs → 403 Blocked
 ```
+
+Cloudflare Worker IPs are recognized as automated traffic and blocked by both services.
 
 ### Worker Runtime Differences
 
@@ -241,7 +244,7 @@ Cloudflare Worker (edge) → miruro.to → Cloudflare internal network → 200 O
 | `GET /api/episodes/:id` | Episode list (pipe) |
 | `GET /api/watch/:provider/:anilistId/:category/:slug` | Streaming sources (pipe) |
 
-### Deploy
+### Deploy (Experimental)
 
 ```bash
 npm install -g wrangler

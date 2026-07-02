@@ -1414,31 +1414,18 @@ docker build -t miruroapi .
 docker run -p 3000:3000 miruroapi
 ```
 
-### ⚡ Cloudflare Worker (Streaming Works!)
+### ⚡ Cloudflare Worker (Experimental)
 
-> **Streaming endpoints work on Workers** — requests to Miruro bypass Cloudflare bot detection because Workers run on Cloudflare's edge network (edge-to-edge traffic is trusted).
-
-```bash
-# Install wrangler CLI
-npm install -g wrangler
-
-# Login to Cloudflare
-wrangler login
-
-# Deploy
-wrangler deploy worker.js --name miruroapi
-```
-
-Your API is live at: `https://miruroapi.YOUR_SUBDOMAIN.workers.dev`
+> **⚠️ Note:** Cloudflare Workers are blocked by both AniList and Miruro. Worker IPs are detected as automated and rejected with HTTP 403. The Worker remains in the repo for reference but is not recommended as a streaming fix.
 
 | Feature | Vercel | Cloudflare Worker |
 |---------|--------|-------------------|
-| Streaming (pipe) | Blocked (403) | Works |
+| AniList endpoints | Works | Blocked (403) |
+| Streaming (pipe) | Blocked (403) | Blocked (403) |
 | Cold starts | ~500ms | Zero |
 | Free tier | Unlimited | 100K req/day |
-| npm deps | Yes | No (native fetch) |
 
-> See `worker.js` for the full Worker implementation with 15 endpoints.
+> See `worker.js` for the Worker implementation. For streaming, use FlareSolverr or self-host instead.
 
 ---
 
@@ -1518,42 +1505,9 @@ Cloudflare detects:
 - Missing browser fingerprint headers
 - Non-residential traffic patterns
 
-#### Fix 1: Cloudflare Worker (Best — Free, Works!)
+#### Fix 1: FlareSolverr (Best — Free, Works!)
 
-Workers run on Cloudflare's edge network. Edge-to-edge requests are trusted — no bot detection.
-
-```bash
-# 1. Install wrangler
-npm install -g wrangler
-
-# 2. Login
-wrangler login
-
-# 3. Deploy
-wrangler deploy worker.js --name miruroapi
-
-# 4. Your streaming now works at:
-# https://miruroapi.YOUR_SUBDOMAIN.workers.dev/api/episodes/20
-```
-
-**Cost:** Free (100K requests/day). No API key needed.
-
-#### Fix 2: ScraperAPI (Paid — $49/month)
-
-ScraperAPI proxies your requests through residential IPs, bypassing Cloudflare.
-
-```bash
-# 1. Sign up at https://www.scraperapi.com/ (free 1,000 requests/month)
-# 2. Get your API key from the dashboard
-# 3. Add to Vercel environment variables:
-SCRAPER_API_KEY=your_api_key_here
-```
-
-**Cost:** $49/month (premium plan required for protected domains like Miruro).
-
-#### Fix 3: FlareSolverr (Self-Hosted — Unlimited)
-
-FlareSolverr runs a headless browser that bypasses Cloudflare automatically.
+FlareSolverr runs a headless browser that bypasses Cloudflare automatically. This is the most reliable fix.
 
 ```bash
 # 1. Run FlareSolverr on your own server
@@ -1570,9 +1524,22 @@ FLARESOLVERR_URL=http://your-server-ip:8191
 - Public IP address
 - Docker installed
 
-#### Fix 4: Self-Host the Entire API
+#### Fix 2: ScraperAPI (Paid — $49/month)
 
-If you run the API on your own VPS (not Vercel), requests come from your residential/datacenter IP which may not be blocked.
+ScraperAPI proxies your requests through residential IPs, bypassing Cloudflare.
+
+```bash
+# 1. Sign up at https://www.scraperapi.com/
+# 2. Get your API key from the dashboard
+# 3. Add to Vercel environment variables:
+SCRAPER_API_KEY=your_api_key_here
+```
+
+**Cost:** $49/month (premium plan required for protected domains like Miruro).
+
+#### Fix 3: Self-Host the Entire API
+
+If you run the API on your own VPS (not Vercel), requests come from your IP which may not be blocked.
 
 ```bash
 # Clone and install
