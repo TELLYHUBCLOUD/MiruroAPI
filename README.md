@@ -101,11 +101,37 @@
 ### 🔄 Self-Healing System (v2.3.0)
 
 When Cloudflare blocks streaming requests, the API automatically tries fallback methods:
-- **Direct** → Mirror rotation across 4 domains
+- **Direct** → Mirror rotation across 4 domains (miruro.to, miruro.ru, miruro.bz, miruro.tv)
 - **ScraperAPI** → Free proxy bypass (1K req/month)
 - **FlareSolverr** → Self-hosted browser proxy
 
 Zero-config: works out of the box. Add `SCRAPER_API_KEY` env var for automatic Cloudflare bypass.
+
+### ⚠️ Streaming Status
+
+> **Streaming endpoints (`/api/episodes`, `/api/watch`, `/api/sources`, `/api/stream`) return 500 errors when Cloudflare blocks pipe requests.**
+>
+> This is expected behavior on Vercel's free tier. Cloudflare's bot protection blocks requests from datacenter IPs (including Vercel's). Metadata endpoints (search, info, trending, etc.) work perfectly — only streaming is affected.
+
+| What Works | What's Blocked |
+|:---|:---|
+| Search, suggestions, filter | Episodes, sources, stream |
+| Info, characters, relations | Watch, download |
+| Trending, popular, schedule | All pipe-dependent endpoints |
+| Genres, tags, calendar | Streaming provider data |
+| All AniList-backed endpoints | |
+
+**To fix streaming**, set one of these environment variables in Vercel:
+
+```bash
+# Option 1: ScraperAPI (free 1K requests/month)
+SCRAPER_API_KEY=your_scraperapi_key
+
+# Option 2: FlareSolverr (self-hosted, unlimited)
+FLARESOLVERR_URL=http://your-flaresolverr-host:8191
+```
+
+See [How to Fix Streaming](#-how-to-fix-streaming-issues) in Troubleshooting below.
 
 ### How It Works
 
@@ -410,8 +436,12 @@ bun dev
 | `ALLOWED_ORIGINS` | `*` | Comma-separated allowed origins (restricts CORS in production) |
 | `PIPE_OBF_KEY` | `71951034...` | Pipe response XOR obfuscation key (hex, 32 chars) |
 | `PRU_PROXY_KEY` | `a54d389c...` | PRU proxy URL XOR key (hex, 32 chars) |
+| `SCRAPER_API_KEY` | — | ScraperAPI key for Cloudflare bypass (free 1K req/month) |
+| `FLARESOLVERR_URL` | — | FlareSolverr URL for browser-based bypass (e.g., `http://127.0.0.1:8191`) |
 
 > ⚠️ **Required for production:** Set `ALLOWED_ORIGINS` to restrict CORS. Set `PIPE_OBF_KEY` and `PRU_PROXY_KEY` for pipe decoding.
+>
+> 📺 **For streaming:** Set `SCRAPER_API_KEY` or `FLARESOLVERR_URL` to bypass Cloudflare bot protection. See [How to Fix Streaming Issues](#-how-to-fix-streaming-issues).
 
 ### Vercel Configuration
 
@@ -1445,6 +1475,95 @@ docker run -p 3000:3000 miruroapi
 | ❌ Deploy fails on Vercel | Build error | Check `node server.js` locally first |
 | ❌ Slow first request | Serverless cold start | Normal — first request after idle takes ~500ms |
 | ❌ Rate limited | Too many requests | Cache reduces this — wait for TTL expiry |
+| ❌ **Streaming 500 errors** | **Cloudflare blocks pipe requests** | **Set `SCRAPER_API_KEY` or `FLARESOLVERR_URL`** (see below) |
+
+### 🎬 How to Fix Streaming Issues
+
+Streaming endpoints fail because Cloudflare's bot protection blocks requests from Vercel's datacenter IPs. The pipe endpoint (`miruro.to/api/secure/pipe`) returns HTTP 403 to any request that doesn't come from a residential IP or real browser.
+
+#### Why Does This Happen?
+
+```
+Your App (Vercel) → Cloudflare WAF → miruro.to/api/secure/pipe → 403 Blocked
+```
+
+Cloudflare detects:
+- Datacenter IP ranges (Vercel, AWS, GCP, etc.)
+- Missing browser fingerprint headers
+- Non-residential traffic patterns
+
+#### Fix 1: ScraperAPI (Easiest — Free Tier)
+
+ScraperAPI proxies your requests through residential IPs, bypassing Cloudflare.
+
+```bash
+# 1. Sign up at https://www.scraperapi.com/ (free 1,000 requests/month)
+# 2. Get your API key from the dashboard
+# 3. Add to Vercel environment variables:
+SCRAPER_API_KEY=your_api_key_here
+```
+
+**Cost:** Free for 1K requests/month. Paid plans from $49/month for 250K requests.
+
+#### Fix 2: FlareSolverr (Self-Hosted — Unlimited)
+
+FlareSolverr runs a headless browser that bypasses Cloudflare automatically.
+
+```bash
+# 1. Run FlareSolverr on your own server
+docker run -d --name flaresolverr -p 8191:8191 ghcr.io/flaresolverr/flaresolverr:latest
+
+# 2. Add to Vercel environment variables:
+FLARESOLVERR_URL=http://your-server-ip:8191
+```
+
+**Cost:** Free (self-hosted). Requires a VPS with Docker.
+
+**Requirements:**
+- 1GB+ RAM
+- Public IP address
+- Docker installed
+
+#### Fix 3: Self-Host the Entire API
+
+If you run the API on your own VPS (not Vercel), requests come from your residential/datacenter IP which may not be blocked.
+
+```bash
+# Clone and install
+git clone https://github.com/Shineii86/MiruroAPI.git
+cd MiruroAPI && npm install
+
+# Start on your own server
+npm start
+# → http://your-server:3000
+```
+
+#### Verifying the Fix
+
+After setting an environment variable, check if streaming works:
+
+```bash
+# Check pipe health
+curl "https://mirurotvapi.vercel.app/api/pipe-health"
+
+# Test episodes
+curl "https://mirurotvapi.vercel.app/api/episodes/20"
+```
+
+Expected response when streaming works:
+```json
+{
+  "success": true,
+  "results": {
+    "methods": {
+      "direct": { "status": "failed" },
+      "scraperapi": { "status": "working", "latency": "1200ms" }
+    },
+    "working": 1,
+    "recommendation": "ScraperAPI is working. Streaming endpoints are functional."
+  }
+}
+```
 
 ### 🐛 Debug Mode
 
@@ -1502,6 +1621,24 @@ Yes! Use <code>npm start</code> to run the Express server on any VPS, Docker con
 <summary><b>🎬 Which streaming providers are available?</b></summary>
 <br/>
 12 providers: kiwi, pewe, bee, bonk, bun, ally, nun, twin, cog, moo, hop, telli. Not all anime are available on every provider.
+</details>
+
+<details>
+<summary><b>❌ Why are streaming endpoints returning 500 errors?</b></summary>
+<br/>
+Cloudflare's bot protection blocks requests from Vercel's datacenter IPs. The pipe endpoint (<code>miruro.to/api/secure/pipe</code>) returns HTTP 403. To fix this, set <code>SCRAPER_API_KEY</code> (free 1K req/month from ScraperAPI) or <code>FLARESOLVERR_URL</code> (self-hosted browser proxy) in your Vercel environment variables. See <a href="#-how-to-fix-streaming-issues">How to Fix Streaming Issues</a> above.
+</details>
+
+<details>
+<summary><b>🔍 Why does /api/staff/:id return 404?</b></summary>
+<br/>
+Some AniList staff IDs don't exist or have limited data. Try searching with <code>/api/staff?query=name</code> instead. This is an AniList API limitation, not a bug.
+</details>
+
+<details>
+<summary><b>📊 How do I check if streaming is working?</b></summary>
+<br/>
+Use <code>/api/pipe-health</code> to check which pipe methods are working. It shows the status of Direct, ScraperAPI, and FlareSolverr fallback methods with latency and error details.
 </details>
 
 ---
