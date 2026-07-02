@@ -27,7 +27,7 @@
 <p align="center">
   <b>A complete RESTful API for anime streaming data powered by AniList GraphQL and Miruro providers</b><br/>
   Search, browse, filter, watch — every endpoint returns fresh data with smart caching.<br/>
-  35 endpoints, 12 streaming providers, M3U8 URLs with subtitles, skip timestamps, and batch operations.
+  46 endpoints, 12 streaming providers, M3U8 URLs with subtitles, skip timestamps, and batch operations.
 </p>
 
 <p align="center">
@@ -175,7 +175,7 @@ flowchart TD
 - **AniList GraphQL** for rich metadata
 - **Miruro pipe** for streaming sources
 - **Smart caching** with configurable TTL
-- **44 RESTful endpoints**
+- **46 RESTful endpoints**
 - **Gzip compression** — 30-70% smaller responses
 - **Request logging** — method, path, status, duration
 - **Graceful error handling** per endpoint
@@ -230,7 +230,7 @@ flowchart TD
 
 | Feature | Description | Status |
 |:---|:---|:---:|
-| 🎬 44 API Endpoints | Complete anime data coverage | ✅ |
+| 🎬 46 API Endpoints | Complete anime data coverage | ✅ |
 | 🔍 Full-Text Search | Keyword search with pagination | ✅ |
 | 💡 Search Suggestions | Fast autocomplete | ✅ |
 | 🎯 Advanced Filtering | Genre, year, season, format, sort | ✅ |
@@ -362,7 +362,7 @@ MiruroAPI/
 │   │   └── 📄 cache.js                     #       💾 In-memory cache with TTL
 │   │
 │   └── 📂 routes/                          #    🛤️ Express routes
-│       └── 📄 apiRoutes.js                 #       🌐 Main API routes (35 endpoints)
+│       └── 📄 apiRoutes.js                 #       🌐 Main API routes (46 endpoints)
 │
 ├── 📄 server.js                            # 🚀 Express server entry point
 ├── 📄 package.json                         # 📦 Dependencies & scripts
@@ -539,7 +539,7 @@ console.log(resp.data);
     "timestamp": "2026-06-09T09:55:00.884Z",
     "node": "v24.14.1",
     "memory": { "used": "13MB", "total": "15MB" },
-    "endpoints": 44,
+    "endpoints": 46,
     "providers": ["kiwi","pewe","bee","bonk","bun","ally","nun","twin","cog","moo","hop","telli"]
   }
 }
@@ -580,7 +580,7 @@ console.log(resp.data);
     "uptime": "0h 0m 34s",
     "requests": { "total": 156, "errors": 3, "successRate": "98.1%" },
     "cache": { "size": 12, "maxSize": 100, "ttl": "1 min" },
-    "endpoints": 44,
+    "endpoints": 46,
     "timestamp": "2026-06-09T09:55:00.884Z"
   }
 }
@@ -1658,7 +1658,7 @@ Use <code>/api/pipe-health</code> to check which pipe methods are working. It sh
 
 ### ✅ Completed
 
-- [x] 🎬 44 API endpoints covering all data
+- [x] 🎬 46 API endpoints covering all data
 - [x] 🔍 Full-text search with pagination
 - [x] 💡 Search suggestions for autocomplete
 - [x] 🎯 Advanced filtering (genre, year, season, format, sort)
