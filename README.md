@@ -1414,19 +1414,6 @@ docker build -t miruroapi .
 docker run -p 3000:3000 miruroapi
 ```
 
-### ⚡ Cloudflare Worker (Experimental)
-
-> **⚠️ Note:** Cloudflare Workers are blocked by both AniList and Miruro. Worker IPs are detected as automated and rejected with HTTP 403. The Worker remains in the repo for reference but is not recommended as a streaming fix.
-
-| Feature | Vercel | Cloudflare Worker |
-|---------|--------|-------------------|
-| AniList endpoints | Works | Blocked (403) |
-| Streaming (pipe) | Blocked (403) | Blocked (403) |
-| Cold starts | ~500ms | Zero |
-| Free tier | Unlimited | 100K req/day |
-
-> See `worker.js` for the Worker implementation. For streaming, use FlareSolverr or self-host instead.
-
 ---
 
 ## 📜 Available Scripts
