@@ -153,7 +153,7 @@ const methodScraperAPI = async (encodedReq) => {
   if (!SCRAPER_API_KEY) throw new Error("SCRAPER_API_KEY not configured");
 
   const targetUrl = `${MIRURO_ORIGINS[0]}${PIPE_PATH}?e=${encodedReq}`;
-  const scraperUrl = `https://api.scraperapi.com/?api_key=${SCRAPER_API_KEY}&url=${encodeURIComponent(targetUrl)}`;
+  const scraperUrl = `https://api.scraperapi.com/?api_key=${SCRAPER_API_KEY}&premium=true&url=${encodeURIComponent(targetUrl)}`;
 
   const res = await axios.get(scraperUrl, {
     headers: {

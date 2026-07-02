@@ -102,10 +102,10 @@
 
 When Cloudflare blocks streaming requests, the API automatically tries fallback methods:
 - **Direct** → Mirror rotation across 4 domains (miruro.to, miruro.ru, miruro.bz, miruro.tv)
-- **ScraperAPI** → Free proxy bypass (1K req/month)
+- **ScraperAPI** → Proxy bypass via premium residential IPs ($49/mo)
 - **FlareSolverr** → Self-hosted browser proxy
 
-Zero-config: works out of the box. Add `SCRAPER_API_KEY` env var for automatic Cloudflare bypass.
+Zero-config: works out of the box. Add `SCRAPER_API_KEY` env var for automatic Cloudflare bypass (requires ScraperAPI premium plan for protected domains).
 
 ### ⚠️ Streaming Status
 
@@ -124,7 +124,7 @@ Zero-config: works out of the box. Add `SCRAPER_API_KEY` env var for automatic C
 **To fix streaming**, set one of these environment variables in Vercel:
 
 ```bash
-# Option 1: ScraperAPI (free 1K requests/month)
+# Option 1: ScraperAPI (requires premium plan — $49/month)
 SCRAPER_API_KEY=your_scraperapi_key
 
 # Option 2: FlareSolverr (self-hosted, unlimited)
@@ -436,12 +436,12 @@ bun dev
 | `ALLOWED_ORIGINS` | `*` | Comma-separated allowed origins (restricts CORS in production) |
 | `PIPE_OBF_KEY` | `71951034...` | Pipe response XOR obfuscation key (hex, 32 chars) |
 | `PRU_PROXY_KEY` | `a54d389c...` | PRU proxy URL XOR key (hex, 32 chars) |
-| `SCRAPER_API_KEY` | — | ScraperAPI key for Cloudflare bypass (free 1K req/month) |
+| `SCRAPER_API_KEY` | — | ScraperAPI key for Cloudflare bypass (requires premium plan, $49/mo) |
 | `FLARESOLVERR_URL` | — | FlareSolverr URL for browser-based bypass (e.g., `http://127.0.0.1:8191`) |
 
 > ⚠️ **Required for production:** Set `ALLOWED_ORIGINS` to restrict CORS. Set `PIPE_OBF_KEY` and `PRU_PROXY_KEY` for pipe decoding.
 >
-> 📺 **For streaming:** Set `SCRAPER_API_KEY` or `FLARESOLVERR_URL` to bypass Cloudflare bot protection. See [How to Fix Streaming Issues](#-how-to-fix-streaming-issues).
+> 📺 **For streaming:** Set `SCRAPER_API_KEY` (requires ScraperAPI premium plan) or `FLARESOLVERR_URL` (free, self-hosted) to bypass Cloudflare bot protection. See [How to Fix Streaming Issues](#-how-to-fix-streaming-issues).
 
 ### Vercel Configuration
 
@@ -1503,7 +1503,7 @@ ScraperAPI proxies your requests through residential IPs, bypassing Cloudflare.
 SCRAPER_API_KEY=your_api_key_here
 ```
 
-**Cost:** Free for 1K requests/month. Paid plans from $49/month for 250K requests.
+**Cost:** $49/month (premium plan required for protected domains like Miruro).
 
 #### Fix 2: FlareSolverr (Self-Hosted — Unlimited)
 
@@ -1626,7 +1626,7 @@ Yes! Use <code>npm start</code> to run the Express server on any VPS, Docker con
 <details>
 <summary><b>❌ Why are streaming endpoints returning 500 errors?</b></summary>
 <br/>
-Cloudflare's bot protection blocks requests from Vercel's datacenter IPs. The pipe endpoint (<code>miruro.to/api/secure/pipe</code>) returns HTTP 403. To fix this, set <code>SCRAPER_API_KEY</code> (free 1K req/month from ScraperAPI) or <code>FLARESOLVERR_URL</code> (self-hosted browser proxy) in your Vercel environment variables. See <a href="#-how-to-fix-streaming-issues">How to Fix Streaming Issues</a> above.
+Cloudflare's bot protection blocks requests from Vercel's datacenter IPs. The pipe endpoint (<code>miruro.to/api/secure/pipe</code>) returns HTTP 403. To fix this, set <code>SCRAPER_API_KEY</code> (requires ScraperAPI premium plan, $49/mo) or <code>FLARESOLVERR_URL</code> (self-hosted, free) in your Vercel environment variables. See <a href="#-how-to-fix-streaming-issues">How to Fix Streaming Issues</a> above.
 </details>
 
 <details>

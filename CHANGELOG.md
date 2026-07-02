@@ -25,7 +25,7 @@ GET /api/pipe-health
 #### Configuration (all optional, zero-config to start)
 | Env Var | Purpose | Free? |
 |---------|---------|-------|
-| `SCRAPER_API_KEY` | ScraperAPI proxy | Yes (1K req/mo) |
+| `SCRAPER_API_KEY` | ScraperAPI proxy | No ($49/mo premium required for protected domains) |
 | `FLARESOLVERR_URL` | FlareSolverr browser | Yes (self-hosted) |
 | `PIPE_OBF_KEY` | XOR decode key | N/A |
 
