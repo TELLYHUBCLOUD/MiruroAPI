@@ -4,13 +4,15 @@
  * Repository: https://github.com/Shineii86/MiruroAPI
  *
  * @description
- *   Miruro streaming pipe integration. Handles encoding/decoding
- *   of the secure/pipe tunnel that Miruro uses for episode lists
- *   and streaming sources. Decodes base64+gzip responses and
- *   injects simplified slug-based episode IDs.
+ *   Miruro streaming pipe integration with self-healing fallback system.
+ *   Automatically tries multiple methods to reach the pipe endpoint:
+ *   1. Direct request with mirror rotation
+ *   2. ScraperAPI proxy (if SCRAPER_API_KEY is set)
+ *   3. FlareSolverr browser proxy (if FLARESOLVERR_URL is set)
+ *   Decodes base64+gzip responses and injects simplified slug-based episode IDs.
  *
  * @exports
- *   getEpisodes, getSources, getWatchSources
+ *   getEpisodes, getSources, getWatchSources, pipeHealthCheck
  *
  * @author  Shinei Nouzen
  * @license MIT
@@ -26,23 +28,8 @@ const { getCached, setCache } = require("./cache");
 // MIRURO PIPE CONFIGURATION
 // ══════════════════════════════════════════════════════════════
 
-/**
- * Miruro's secure pipe endpoint path (same-origin relative on every mirror).
- * The pipe tunnel uses base64+gzip (and optionally XOR) encoded request/response.
- *
- * @type {string}
- */
 const PIPE_PATH = "/api/secure/pipe";
 
-/**
- * Ordered list of Miruro mirror origins that host the secure pipe endpoint.
- * Miruro rotates domains frequently and sits behind Cloudflare bot protection,
- * so we try them in order and rotate to the next on any block/reset.
- * `.ru` currently serves the pipe with the lightest Cloudflare friction;
- * `.to` is the canonical origin referenced in CORS headers.
- *
- * @type {string[]}
- */
 const MIRURO_ORIGINS = [
   "https://www.miruro.ru",
   "https://www.miruro.to",
@@ -50,21 +37,8 @@ const MIRURO_ORIGINS = [
   "https://www.miruro.tv",
 ];
 
-/**
- * Canonical origin used for the Referer/Origin headers (matches the
- * `access-control-allow-origin` the pipe returns).
- *
- * @type {string}
- */
 const CANONICAL_ORIGIN = "https://www.miruro.to";
 
-/**
- * Request headers mimicking a real browser. The pipe endpoint sits behind
- * Cloudflare, which inspects UA + sec-fetch + Accept headers, so these must
- * look like a genuine same-origin browser request.
- *
- * @type {object}
- */
 const HEADERS = {
   "User-Agent":
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
@@ -81,62 +55,34 @@ const HEADERS = {
 };
 
 // ══════════════════════════════════════════════════════════════
+// FALLBACK METHOD CONFIGURATION
+// ══════════════════════════════════════════════════════════════
+
+const SCRAPER_API_KEY = process.env.SCRAPER_API_KEY || "";
+const FLARESOLVERR_URL = process.env.FLARESOLVERR_URL || "";
+
+// ══════════════════════════════════════════════════════════════
 // ENCODING / DECODING UTILITIES
 // ══════════════════════════════════════════════════════════════
 
-// ---- FEATURE: Base64url encode pipe request payload ----
-/**
- * Encodes a JSON payload into the base64url format expected by the pipe endpoint.
- * Used for all pipe API requests (episodes, sources).
- *
- * @param {object} payload - The request payload to encode
- * @returns {string} Base64url-encoded string (no padding)
- *
- * @example
- *   const encoded = encodePipeRequest({ path: "episodes", method: "GET", query: { anilistId: 20 } });
- */
 const encodePipeRequest = (payload) => {
   const json = JSON.stringify(payload);
   return Buffer.from(json).toString("base64url");
 };
 
-// ---- FEATURE: XOR obfuscation key for pipe responses (x-obfuscated: 2) ----
-/**
- * XOR key applied to pipe responses when the server returns the
- * `x-obfuscated: 2` header. Loaded from PIPE_OBF_KEY with hardcoded fallback.
- * Key length: 16 bytes (32 hex chars).
- *
- * @type {Buffer}
- */
 const PIPE_OBF_KEY = Buffer.from(
   process.env.PIPE_OBF_KEY || "71951034f8fbcf53d89db52ceb3dc22c",
   "hex"
 );
 
-// ---- FEATURE: Decode pipe response (header-driven obfuscation scheme) ----
-/**
- * Decodes a pipe response based on the `x-obfuscated` response header.
- *
- * Obfuscation schemes (matches the Miruro frontend's secure client):
- *   - no header / falsy  → body is plain JSON text
- *   - "1"                → body is base64url( gzip( json ) )   (no XOR)
- *   - "2"                → body is base64url( XOR( gzip( json ) ) ) with PIPE_OBF_KEY
- *
- * @param {string} encodedStr - The raw response body text
- * @param {string|null} [obfHeader] - Value of the `x-obfuscated` response header
- * @returns {object} Decoded JSON object
- * @throws {Error} If decoding or decompression fails
- */
 const decodePipeResponse = (encodedStr, obfHeader = null) => {
   try {
-    // NOTE: No obfuscation header → the body is plain JSON
     if (!obfHeader) return JSON.parse(encodedStr);
 
     const padded =
       encodedStr + "=".repeat((4 - (encodedStr.length % 4)) % 4);
     const raw = Buffer.from(padded, "base64url");
 
-    // NOTE: Scheme "2" XORs the base64-decoded bytes with PIPE_OBF_KEY before gunzip
     let bytes = raw;
     if (String(obfHeader) === "2") {
       const xored = Buffer.alloc(raw.length);
@@ -153,28 +99,15 @@ const decodePipeResponse = (encodedStr, obfHeader = null) => {
   }
 };
 
-// ---- FEATURE: Pipe request with mirror rotation + exponential backoff ----
-/**
- * Makes a pipe API request, rotating across Miruro mirrors on block/reset
- * and retrying with exponential backoff.
- *
- * Miruro's pipe sits behind Cloudflare bot protection which intermittently
- * returns 403/444 or resets connections from datacenter IPs, so each retry
- * targets the next mirror origin and honors a short backoff.
- *
- * @param {string} path - Pipe path ("episodes" or "sources")
- * @param {object} query - Query parameters for the pipe
- * @param {number} [maxRetries=3] - Maximum number of retries
- * @returns {Promise<object>} Decoded pipe response
- * @throws {Error} If all retries fail
- */
-const pipeRequest = async (path, query, maxRetries = 4) => {
-  const payload = { path, method: "GET", query, body: null };
-  const encodedReq = encodePipeRequest(payload);
+// ══════════════════════════════════════════════════════════════
+// METHOD 1: DIRECT REQUEST (with mirror rotation)
+// ══════════════════════════════════════════════════════════════
 
+const methodDirect = async (encodedReq) => {
+  const maxRetries = 4;
   let lastError;
+
   for (let attempt = 0; attempt < maxRetries; attempt++) {
-    // NOTE: Rotate mirror on every attempt to spread Cloudflare pressure
     const origin = MIRURO_ORIGINS[attempt % MIRURO_ORIGINS.length];
 
     try {
@@ -184,49 +117,166 @@ const pipeRequest = async (path, query, maxRetries = 4) => {
         maxRedirects: 5,
       });
 
-      if (res.status !== 200) throw new Error(`Pipe request failed: ${res.status}`);
+      if (res.status !== 200)
+        throw new Error(`Pipe request failed: ${res.status}`);
 
-      // NOTE: Decode using the server's x-obfuscated scheme header
       const obf = res.headers["x-obfuscated"];
-      return decodePipeResponse(res.data, obf);
+      return { data: decodePipeResponse(res.data, obf), method: "direct" };
     } catch (e) {
       lastError = e;
       const status = e.response?.status;
 
-      // NOTE: Rotate mirror on Cloudflare blocks / resets (403, 444, conn reset).
-      // 4xx (except 444) are not retryable on the same mirror, but rotating
-      // to another mirror may still succeed, so we only hard-fail on 4xx
-      // when we've exhausted all mirrors.
-      if (status && status >= 400 && status < 500 && status !== 444 && status !== 403) {
+      if (
+        status &&
+        status >= 400 &&
+        status < 500 &&
+        status !== 444 &&
+        status !== 403
+      ) {
         throw new Error(`Pipe request failed with status ${status}`);
       }
 
-      // NOTE: Exponential backoff: 1s, 2s, 4s
       if (attempt < maxRetries - 1) {
         const delay = Math.pow(2, attempt) * 1000;
         await new Promise((r) => setTimeout(r, delay));
       }
     }
   }
-  throw lastError || new Error("Pipe request failed after all retries");
+  throw lastError || new Error("Direct request failed after all retries");
 };
 
-// ---- FEATURE: Subtitle proxy for CORS-safe browser access ----
-/**
- * CDN streams (mt.nekostream.site) have CORS * — browsers load them directly.
- * Subtitles use third-party CDNs that may block cross-origin — proxy those.
- *
- * @type {string}
- */
+// ══════════════════════════════════════════════════════════════
+// METHOD 2: SCRAPERAPI PROXY
+// ══════════════════════════════════════════════════════════════
+
+const methodScraperAPI = async (encodedReq) => {
+  if (!SCRAPER_API_KEY) throw new Error("SCRAPER_API_KEY not configured");
+
+  const targetUrl = `${MIRURO_ORIGINS[0]}${PIPE_PATH}?e=${encodedReq}`;
+  const scraperUrl = `https://api.scraperapi.com/?api_key=${SCRAPER_API_KEY}&url=${encodeURIComponent(targetUrl)}`;
+
+  const res = await axios.get(scraperUrl, {
+    headers: {
+      "User-Agent": HEADERS["User-Agent"],
+    },
+    timeout: 60000,
+    maxRedirects: 5,
+  });
+
+  if (res.status !== 200)
+    throw new Error(`ScraperAPI request failed: ${res.status}`);
+
+  const obf = res.headers["x-obfuscated"];
+  return { data: decodePipeResponse(res.data, obf), method: "scraperapi" };
+};
+
+// ══════════════════════════════════════════════════════════════
+// METHOD 3: FLARESOLVERR BROWSER PROXY
+// ══════════════════════════════════════════════════════════════
+
+const methodFlareSolverr = async (encodedReq) => {
+  if (!FLARESOLVERR_URL) throw new Error("FLARESOLVERR_URL not configured");
+
+  const targetUrl = `${MIRURO_ORIGINS[0]}${PIPE_PATH}?e=${encodedReq}`;
+
+  const res = await axios.post(
+    `${FLARESOLVERR_URL.replace(/\/$/, "")}/v1`,
+    {
+      cmd: "request.get",
+      url: targetUrl,
+      maxTimeout: 60000,
+    },
+    {
+      headers: { "Content-Type": "application/json" },
+      timeout: 70000,
+    }
+  );
+
+  if (res.status !== 200)
+    throw new Error(`FlareSolverr request failed: ${res.status}`);
+
+  const solution = res.data?.solution;
+  if (!solution?.response)
+    throw new Error("FlareSolverr returned no response");
+
+  const body = solution.response;
+  const obf = solution.headers?.["x-obfuscated"] || null;
+
+  return { data: decodePipeResponse(body, obf), method: "flaresolverr" };
+};
+
+// ══════════════════════════════════════════════════════════════
+// SELF-HEALING PIPE REQUEST (tries all methods in order)
+// ══════════════════════════════════════════════════════════════
+
+const METHODS = [
+  { name: "direct", fn: methodDirect },
+  { name: "scraperapi", fn: methodScraperAPI, requires: () => !!SCRAPER_API_KEY },
+  { name: "flaresolverr", fn: methodFlareSolverr, requires: () => !!FLARESOLVERR_URL },
+];
+
+const pipeRequest = async (path, query) => {
+  const payload = { path, method: "GET", query, body: null };
+  const encodedReq = encodePipeRequest(payload);
+
+  const errors = [];
+
+  for (const method of METHODS) {
+    if (method.requires && !method.requires()) continue;
+
+    try {
+      const result = await method.fn(encodedReq);
+      return result.data;
+    } catch (e) {
+      errors.push({ method: method.name, error: e.message });
+    }
+  }
+
+  throw new Error(
+    `All pipe methods failed: ${errors.map((e) => `${e.method}(${e.error})`).join(", ")}`
+  );
+};
+
+// ══════════════════════════════════════════════════════════════
+// PIPE HEALTH CHECK (for /api/pipe-health)
+// ══════════════════════════════════════════════════════════════
+
+const pipeHealthCheck = async () => {
+  const results = {};
+  const testPayload = { path: "episodes", method: "GET", query: { anilistId: 20 }, body: null };
+  const encodedReq = encodePipeRequest(testPayload);
+
+  for (const method of METHODS) {
+    if (method.requires && !method.requires()) {
+      results[method.name] = { status: "skipped", reason: "not configured" };
+      continue;
+    }
+
+    const start = Date.now();
+    try {
+      await method.fn(encodedReq);
+      results[method.name] = {
+        status: "ok",
+        latency: Date.now() - start + "ms",
+      };
+    } catch (e) {
+      results[method.name] = {
+        status: "failed",
+        error: e.message,
+        latency: Date.now() - start + "ms",
+      };
+    }
+  }
+
+  return results;
+};
+
+// ══════════════════════════════════════════════════════════════
+// PROXY & ENCODE HELPERS (unchanged)
+// ══════════════════════════════════════════════════════════════
+
 const PROXY_BASE = "/api/proxy?url=";
 
-/**
- * Proxies a URL through /api/proxy for CORS bypass.
- *
- * @param {string} url - Raw URL
- * @param {string} [referer] - Optional referer to pass
- * @returns {string} Proxied URL
- */
 const proxyUrl = (url, referer) => {
   if (!url || !url.startsWith("http")) return url;
   try {
@@ -237,27 +287,8 @@ const proxyUrl = (url, referer) => {
   }
 };
 
-/**
- * Streams are returned as-is (raw CDN URLs).
- * The browser loads them directly — CDN has CORS * and serves real content to residential IPs.
- * Server-side requests get decoy PNG images, so proxying through /api/proxy defeats the purpose.
- *
- * @param {object} sources - Decoded sources with streams array
- * @returns {object} Sources with raw stream URLs
- */
-const proxyStreams = (sources) => {
-  // NOTE: Intentionally return raw CDN URLs — the CDN serves real video to browsers
-  // but decoy PNG images to server-side requests. The browser's residential IP is required.
-  return sources;
-};
+const proxyStreams = (sources) => sources;
 
-/**
- * Proxies subtitle URLs through /api/proxy for CORS bypass.
- * Subtitles come from third-party CDNs that may not have CORS headers.
- *
- * @param {object} sources - Decoded sources with subtitles array
- * @returns {object} Sources with proxied subtitle URLs
- */
 const proxySubtitles = (sources) => {
   if (!sources?.subtitles) return sources;
   sources.subtitles = sources.subtitles.map((s) => {
@@ -269,23 +300,14 @@ const proxySubtitles = (sources) => {
   return sources;
 };
 
-// ---- FEATURE: Decode base64 episode ID to plain text ----
-/**
- * Decodes a base64-encoded episode ID back to plain text.
- * Episode IDs from the pipe are base64-encoded with ":" separators.
- *
- * @param {string} encodedId - The base64url-encoded episode ID
- * @returns {string} Decoded plain text ID, or original if decoding fails
- *
- * @example
- *   const decoded = translateId("YW5pbWVwaGU6MjA6c3ViOjE=");
- *   // returns "animepahe:20:sub:1"
- */
+// ══════════════════════════════════════════════════════════════
+// EPISODE ID TRANSLATION
+// ══════════════════════════════════════════════════════════════
+
 const translateId = (encodedId) => {
   try {
     const padded = encodedId + "=".repeat((4 - (encodedId.length % 4)) % 4);
     const decoded = Buffer.from(padded, "base64url").toString("utf-8");
-    // NOTE: Only return decoded value if it looks like a valid ID (contains ":")
     if (decoded.includes(":")) return decoded;
     return encodedId;
   } catch {
@@ -293,16 +315,6 @@ const translateId = (encodedId) => {
   }
 };
 
-// ---- FEATURE: Recursively decode all base64 IDs in a nested object ----
-/**
- * Walks a JSON structure and decodes any base64 "id" fields.
- * Saves the original base64 value in a `rawPipeId` field on episode objects
- * so the pipe sources endpoint can be called directly from the client.
- * Returns a deep clone — does not mutate the original object.
- *
- * @param {object|Array} obj - The object or array to process
- * @returns {object|Array} A new object with decoded IDs
- */
 const deepTranslate = (obj) => {
   if (obj && typeof obj === "object") {
     if (Array.isArray(obj)) {
@@ -328,21 +340,6 @@ const deepTranslate = (obj) => {
 // EPISODE ID INJECTION
 // ══════════════════════════════════════════════════════════════
 
-// ---- FEATURE: Transform episode IDs into simplified path-based slugs ----
-/**
- * Converts raw pipe episode IDs into clean slug format:
- *   watch/{provider}/{anilistId}/{category}/{prefix}-{number}
- *
- * This makes episode IDs human-readable and URL-safe for the /watch endpoint.
- *
- * @param {object} data - Raw pipe response with providers
- * @param {number} anilistId - The AniList anime ID
- * @returns {object} Modified data with slug-based episode IDs
- *
- * @example
- *   // Before: "animepahe:20:sub:1"
- *   // After:  "watch/kiwi/20/sub/animepahe-1"
- */
 const injectSourceSlugs = (data, anilistId) => {
   const providers = data.providers || {};
 
@@ -352,7 +349,6 @@ const injectSourceSlugs = (data, anilistId) => {
     let episodes = provData.episodes;
     if (!episodes) continue;
 
-    // NOTE: Some providers return a flat array — wrap it in { sub: [...] }
     if (Array.isArray(episodes)) {
       provData.episodes = { sub: episodes };
       episodes = provData.episodes;
@@ -363,8 +359,6 @@ const injectSourceSlugs = (data, anilistId) => {
 
       for (const ep of epList) {
         if (ep.id && ep.number) {
-          // NOTE: rawPipeId is already set by deepTranslate — preserve original base64
-          // Take only the prefix before ":" for the slug
           const prefix = ep.id.includes(":") ? ep.id.split(":")[0] : ep.id;
           ep.id = `watch/${provName}/${anilistId}/${category}/${prefix}-${ep.number}`;
         }
@@ -379,15 +373,6 @@ const injectSourceSlugs = (data, anilistId) => {
 // PIPE API FUNCTIONS
 // ══════════════════════════════════════════════════════════════
 
-// ---- FEATURE: Fetch raw decoded episode data from Miruro pipe ----
-/**
- * Internal helper to fetch and decode raw episode data from the pipe.
- * Uses pipeRequest with retry logic and caches results for 5 minutes.
- *
- * @param {number} anilistId - The AniList anime ID
- * @returns {Promise<object>} Decoded episode data with providers
- * @throws {Error} If the pipe request fails
- */
 const fetchRawEpisodes = async (anilistId) => {
   const cacheKey = `pipe:episodes:${anilistId}`;
   const cached = getCached(cacheKey);
@@ -399,23 +384,10 @@ const fetchRawEpisodes = async (anilistId) => {
   return result;
 };
 
-// ---- FEATURE: Get episodes with slug-based IDs ----
-/**
- * Fetches the full episode list for an anime from all providers.
- * Returns episodes with simplified slug-based IDs for the /watch endpoint.
- *
- * @param {number} anilistId - The AniList anime ID
- * @returns {Promise<object>} Episode data with providers and mappings
- *
- * @example
- *   const episodes = await getEpisodes(20); // Naruto
- *   console.log(Object.keys(episodes.providers)); // ["kiwi", "bee", "bonk", ...]
- */
 const getEpisodes = async (anilistId) => {
   const data = await fetchRawEpisodes(anilistId);
   const result = injectSourceSlugs(data, anilistId);
 
-  // NOTE: Ensure mappings field is present (like Walter's API)
   if (!result.mappings) {
     result.mappings = { anilistId };
     if (result.malId) result.mappings.malId = result.malId;
@@ -425,22 +397,6 @@ const getEpisodes = async (anilistId) => {
   return result;
 };
 
-// ---- FEATURE: Get streaming sources (detailed endpoint) ----
-/**
- * Fetches M3U8 streaming sources for a specific episode.
- * Uses pipeRequest with retry logic and caches results for 10 minutes.
- * Stream URLs are ephemeral but CDNs serve the same content for hours.
- *
- * @param {string} episodeId - The raw episode ID from the pipe
- * @param {string} provider - Provider name (e.g., "kiwi", "bee", "bonk")
- * @param {number} anilistId - The AniList anime ID
- * @param {string} [category="sub"] - Audio category ("sub" or "dub")
- * @returns {Promise<object>} Streaming sources with M3U8 URLs, subtitles, timestamps
- *
- * @example
- *   const sources = await getSources("animepahe:20:sub:1", "kiwi", 20, "sub");
- *   console.log(sources.streams[0].url); // "https://.../master.m3u8"
- */
 const getSources = async (episodeId, provider, anilistId, category = "sub") => {
   const cacheKey = `pipe:sources:${episodeId}:${provider}:${category}`;
   const cached = getCached(cacheKey);
@@ -459,22 +415,6 @@ const getSources = async (episodeId, provider, anilistId, category = "sub") => {
   return result;
 };
 
-// ---- FEATURE: Get streaming sources (simple slug-based endpoint) ----
-/**
- * Resolves a slug-based episode ID and fetches its streaming sources.
- * This is the recommended endpoint — just pass the slug from /episodes.
- *
- * @param {string} provider - Provider name (e.g., "kiwi", "bee")
- * @param {number} anilistId - The AniList anime ID
- * @param {string} category - Audio category ("sub" or "dub")
- * @param {string} slug - Episode slug (e.g., "animepahe-1")
- * @returns {Promise<object>} Streaming sources with M3U8 URLs, subtitles, timestamps
- * @throws {Error} If provider or episode slug is not found
- *
- * @example
- *   const sources = await getWatchSources("kiwi", 20, "sub", "animepahe-1");
- *   console.log(sources.streams[0].url); // "https://.../master.m3u8"
- */
 const getWatchSources = async (provider, anilistId, category, slug) => {
   const data = await fetchRawEpisodes(anilistId);
   const provData = (data.providers || {})[provider];
@@ -484,75 +424,52 @@ const getWatchSources = async (provider, anilistId, category, slug) => {
   const episodes = provData.episodes?.[category] || [];
   let targetId = null;
 
-  // NOTE: Handle both raw pipe IDs ("animedao:witch-hat-atelier:1") and slugged IDs
-  // ("watch/bonk/147105/sub/animedao-1") which may exist if cache was mutated by injectSourceSlugs.
-  // Match slug against: last path segment (slugged) OR prefix-{number} (raw).
   for (const ep of episodes) {
     const rawId = ep.id || "";
     let match = false;
 
-    // Case 1: Slugged ID — "watch/{provider}/{anilistId}/{category}/{prefix}-{number}"
     if (rawId.includes("/")) {
       const slugSuffix = rawId.split("/").pop();
       match = slugSuffix === slug;
-    }
-    // Case 2: Raw pipe ID — "animedao:witch-hat-atelier:1"
-    else if (rawId.includes(":")) {
+    } else if (rawId.includes(":")) {
       const prefix = rawId.split(":")[0];
       match = `${prefix}-${ep.number}` === slug;
     }
 
     if (match) {
-      // Use rawPipeId if available (decoded pipe format), otherwise use the ep.id
       targetId = ep.rawPipeId ? translateId(ep.rawPipeId) : rawId;
       break;
     }
   }
 
-  if (!targetId) throw new Error(`Episode slug '${slug}' not found for provider ${provider}`);
+  if (!targetId)
+    throw new Error(
+      `Episode slug '${slug}' not found for provider ${provider}`
+    );
   return getSources(targetId, provider, anilistId, category);
 };
 
 // ══════════════════════════════════════════════════════════════
-// SUBTITLE EXTRACTION
+// SUBTITLE & QUALITY UTILITIES
 // ══════════════════════════════════════════════════════════════
 
-// ---- FEATURE: Extract subtitle URLs from streaming sources ----
-/**
- * Extracts and formats subtitle URLs from the pipe sources response.
- * Handles multiple subtitle formats from different providers.
- *
- * Provider formats:
- *   bonk: { file, label, kind, default, language, format, encoding }
- *   others: { url, name, lang, format }
- *
- * @param {object} sources - The sources response from getSources/getWatchSources
- * @returns {Array} Array of subtitle objects { url, label, language, kind, format, isDefault }
- */
 const extractSubtitles = (sources) => {
   const raw = sources.subtitles || sources.captions || [];
-
   if (!Array.isArray(raw)) return [];
 
-  return raw.map((sub) => ({
-    url: sub.url || sub.file || null,
-    label: sub.label || sub.name || sub.language || "Unknown",
-    language: sub.language || sub.lang || sub.label || "en",
-    kind: sub.kind || "subtitles",
-    format: sub.format || "vtt",
-    encoding: sub.encoding || "utf-8",
-    isDefault: sub.default || false,
-  })).filter((sub) => sub.url);
+  return raw
+    .map((sub) => ({
+      url: sub.url || sub.file || null,
+      label: sub.label || sub.name || sub.language || "Unknown",
+      language: sub.language || sub.lang || sub.label || "en",
+      kind: sub.kind || "subtitles",
+      format: sub.format || "vtt",
+      encoding: sub.encoding || "utf-8",
+      isDefault: sub.default || false,
+    }))
+    .filter((sub) => sub.url);
 };
 
-// ---- FEATURE: Extract skip timestamps (OP/ED) from sources ----
-/**
- * Extracts skip timestamps (OP/ED) from the pipe sources response.
- * Only available for providers with skip_times capability (e.g., bonk).
- *
- * @param {object} sources - The sources response from getSources/getWatchSources
- * @returns {object|null} Skip timestamps object or null
- */
 const extractSkipTimes = (sources) => {
   const skipTimes = sources.skipTimes || sources.skip || null;
   if (!skipTimes || typeof skipTimes !== "object") return null;
@@ -564,34 +481,23 @@ const extractSkipTimes = (sources) => {
   };
 };
 
-// ══════════════════════════════════════════════════════════════
-// QUALITY FALLBACK
-// ══════════════════════════════════════════════════════════════
-
-// ---- FEATURE: Get best available stream with quality fallback ----
-/**
- * Returns the best available HLS stream with automatic quality fallback.
- * Tries 1080p → 720p → 480p → 360p in order.
- * Falls back to first HLS stream if no quality match.
- *
- * @param {object} sources - The sources response
- * @param {string} [preferredQuality="1080p"] - Preferred quality
- * @returns {object|null} Best available stream object or null
- */
 const getBestStream = (sources, preferredQuality = "1080p") => {
   const streams = (sources.streams || []).filter((s) => s.url);
   if (streams.length === 0) return null;
 
-  const hlsStreams = streams.filter((s) => s.type === "hls" || !s.type || s.url?.endsWith(".m3u8") || s.url?.includes("m3u8"));
-  const dashStreams = streams.filter((s) => s.type === "dash" || s.url?.endsWith(".mpd"));
+  const hlsStreams = streams.filter(
+    (s) =>
+      s.type === "hls" ||
+      !s.type ||
+      s.url?.endsWith(".m3u8") ||
+      s.url?.includes("m3u8")
+  );
 
   const usable = hlsStreams.length > 0 ? hlsStreams : streams;
 
   const qualityOrder = ["1080p", "720p", "480p", "360p"];
   const startIdx = qualityOrder.indexOf(preferredQuality);
-  const ordered = startIdx >= 0
-    ? qualityOrder.slice(startIdx)
-    : qualityOrder;
+  const ordered = startIdx >= 0 ? qualityOrder.slice(startIdx) : qualityOrder;
 
   for (const q of ordered) {
     const match = usable.find((s) => {
@@ -608,20 +514,9 @@ const getBestStream = (sources, preferredQuality = "1080p") => {
 };
 
 // ══════════════════════════════════════════════════════════════
-// DOWNLOAD URL
+// DOWNLOAD & BATCH
 // ══════════════════════════════════════════════════════════════
 
-// ---- FEATURE: Get download URL for an episode ----
-/**
- * Fetches the download URL for a specific episode from the pipe.
- * Returns the direct download link, subtitles, and best stream if available.
- *
- * @param {string} provider - Provider name
- * @param {number} anilistId - The AniList anime ID
- * @param {string} category - Audio category ("sub" or "dub")
- * @param {string} slug - Episode slug (e.g., "animepahe-1")
- * @returns {Promise<object>} Object with download URL, subtitles, best stream, and metadata
- */
 const getDownloadUrl = async (provider, anilistId, category, slug) => {
   const sources = await getWatchSources(provider, anilistId, category, slug);
   const subtitles = extractSubtitles(sources);
@@ -640,21 +535,6 @@ const getDownloadUrl = async (provider, anilistId, category, slug) => {
   };
 };
 
-// ══════════════════════════════════════════════════════════════
-// BATCH EPISODES
-// ══════════════════════════════════════════════════════════════
-
-// ---- FEATURE: Get sources for multiple episodes at once ----
-/**
- * Fetches streaming sources for multiple episodes in parallel.
- * Useful for preloading next episodes or batch downloading.
- *
- * @param {string} provider - Provider name
- * @param {number} anilistId - The AniList anime ID
- * @param {string} category - Audio category ("sub" or "dub")
- * @param {string[]} slugs - Array of episode slugs (e.g., ["animepahe-1", "animepahe-2"])
- * @returns {Promise<object>} Object mapping slug → sources (with errors for failed ones)
- */
 const getBatchSources = async (provider, anilistId, category, slugs) => {
   const results = {};
 
@@ -678,7 +558,6 @@ const getBatchSources = async (provider, anilistId, category, slugs) => {
     }
   };
 
-  // NOTE: Fetch up to 5 episodes in parallel to avoid rate limiting
   const batchSize = 5;
   for (let i = 0; i < slugs.length; i += batchSize) {
     const batch = slugs.slice(i, i + batchSize);
@@ -710,6 +589,7 @@ module.exports = {
   translateId,
   deepTranslate,
   injectSourceSlugs,
+  pipeHealthCheck,
 };
 
 // ══════════════════════════════════════════════════════════════ END: pipe.js

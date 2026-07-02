@@ -1,5 +1,54 @@
 # Changelog
 
+## v2.3.0
+### Self-Healing Fallback System — Auto-Recovery from Cloudflare Blocks
+
+#### New: Multi-Method Fallback System
+Pipe requests now try **3 methods in order** with automatic fallback:
+1. **Direct** — mirror rotation across `.ru` → `.to` → `.bz` → `.tv` with browser headers
+2. **ScraperAPI** — proxy through `api.scraperapi.com` (free 1,000 req/month, no CC)
+3. **FlareSolverr** — self-hosted browser proxy that solves Cloudflare Turnstile
+
+When one method fails (403/timeout), the next is tried automatically. No manual intervention needed.
+
+#### New Endpoint: `/api/pipe-health`
+Diagnostic endpoint that tests all configured methods and reports:
+- Which methods are working/failed
+- Latency for each method
+- Recommendation on preferred method
+
+```
+GET /api/pipe-health
+→ { methods: { direct: {status:"ok"}, scraperapi: {status:"skipped"} }, working: 1, ... }
+```
+
+#### Configuration (all optional, zero-config to start)
+| Env Var | Purpose | Free? |
+|---------|---------|-------|
+| `SCRAPER_API_KEY` | ScraperAPI proxy | Yes (1K req/mo) |
+| `FLARESOLVERR_URL` | FlareSolverr browser | Yes (self-hosted) |
+| `PIPE_OBF_KEY` | XOR decode key | N/A |
+
+#### How it works
+```
+Client → /api/episodes/20
+         ↓ pipeRequest()
+         ├─ Try direct → 403 (Cloudflare block)
+         ├─ Try ScraperAPI → 200 ✓ (returns data)
+         └─ Cache result, return to client
+```
+
+#### Files Changed
+- `src/helpers/pipe.js` — rewritten with `methodDirect()`, `methodScraperAPI()`, `methodFlareSolverr()`, `pipeHealthCheck()`
+- `src/routes/apiRoutes.js` — added `/api/pipe-health` endpoint
+- `.env.example` — documented `SCRAPER_API_KEY`, `FLARESOLVERR_URL`
+
+#### Notes
+- Zero-config: works without any env vars (direct only)
+- Add `SCRAPER_API_KEY` for free Cloudflare bypass (no server needed)
+- Add `FLARESOLVERR_URL` for self-hosted browser bypass (needs Docker/VPS)
+- All methods use the same pipe protocol (base64+gzip, x-obfuscated header)
+
 ## v2.2.0
 ### Critical Fix — Miruro Pipe Protocol Migration (Streaming Endpoints Restored)
 

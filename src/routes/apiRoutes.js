@@ -20,6 +20,7 @@
 const express = require("express");
 const anilist = require("../helpers/anilist");
 const pipe = require("../helpers/pipe");
+const { pipeHealthCheck } = require("../helpers/pipe");
 const { getCached, setCache } = require("../helpers/cache");
 const { addCreatorInfo } = require("../middleware/creatorInfo");
 
@@ -1123,7 +1124,7 @@ const createApiRoutes = (jsonResponse, jsonError, startTime) => {
       success: true,
       results: {
         status: "healthy",
-        version: "2.2.0",
+        version: "2.3.0",
         uptime: `${hours}h ${minutes}m ${seconds}s`,
         uptimeSeconds: uptime,
         timestamp: new Date().toISOString(),
@@ -1141,6 +1142,38 @@ const createApiRoutes = (jsonResponse, jsonError, startTime) => {
         providers: ["kiwi", "pewe", "bee", "bonk", "bun", "ally", "nun", "twin", "cog", "moo", "hop", "telli"],
       },
     });
+  });
+
+  // ---- FEATURE: Pipe health check (tests all fallback methods) ----
+  router.get("/pipe-health", async (req, res) => {
+    try {
+      const results = await pipeHealthCheck();
+      const working = Object.entries(results).filter(
+        ([, v]) => v.status === "ok"
+      );
+      const failed = Object.entries(results).filter(
+        ([, v]) => v.status === "failed"
+      );
+
+      res.json({
+        success: true,
+        results: {
+          methods: results,
+          working: working.length,
+          failed: failed.length,
+          total: Object.keys(results).length,
+          recommendation:
+            working.length === 0
+              ? "All methods blocked. Check Cloudflare status or add SCRAPER_API_KEY / FLARESOLVERR_URL."
+              : working[0]
+                ? `Preferred: ${working[0][0]} (${working[0][1].latency})`
+                : "No methods available",
+          timestamp: new Date().toISOString(),
+        },
+      });
+    } catch (err) {
+      jsonError(res, err.message);
+    }
   });
 
   // ---- FEATURE: Cache & API statistics ----
@@ -1178,7 +1211,7 @@ const createApiRoutes = (jsonResponse, jsonError, startTime) => {
       info: {
         title: "MiruroAPI",
         description: "Free REST API for anime streaming data — AniList GraphQL + Miruro streaming providers",
-        version: "2.2.0",
+        version: "2.3.0",
         contact: { name: "Shineii86", url: "https://github.com/Shineii86/MiruroAPI" },
       },
       servers: [

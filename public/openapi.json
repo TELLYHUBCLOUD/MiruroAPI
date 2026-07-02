@@ -3,7 +3,7 @@
   "info": {
     "title": "MiruroAPI",
     "description": "Free RESTful API for anime streaming data. Powered by AniList GraphQL and Miruro streaming providers.",
-    "version": "2.2.0",
+    "version": "2.3.0",
     "contact": {
       "name": "Shineii86",
       "url": "https://github.com/Shineii86/MiruroAPI"
