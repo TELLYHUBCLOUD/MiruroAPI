@@ -1565,6 +1565,49 @@ Expected response when streaming works:
 }
 ```
 
+### 🤝 Contributing Bypass Solutions
+
+Streaming is blocked on all cloud platforms. We need help! If you can implement any of these, PRs are welcome:
+
+#### Free / Open Source (Best for self-hosted)
+
+| Tool | Language | How It Works | Notes |
+|------|----------|-------------|-------|
+| [nodriver](https://github.com/ultrafunkamsterdam/nodriver) | Python | CDP-based browser automation, bypasses automation detection | Successor to undetected-chromedriver |
+| [Camoufox](https://github.com/nicandris/camoufox) | Python | Stealth Firefox with fingerprint spoofing | 82% baseline Turnstile bypass |
+| [curl_cffi](https://github.com/nicandris/curl_cffi) | Python | TLS fingerprint impersonation | Lightweight, no browser needed |
+| [FlareSolverr](https://github.com/FlareSolverr/FlareSolverr) | Docker | Headless Chrome proxy server | Can't solve interactive CAPTCHAs |
+| [patchright](https://github.com/nicandris/patchright) | Python | Patched Playwright fork | Drop-in Playwright replacement |
+| [scrapy-impersonate](https://github.com/driver-utils/scrapy-impersonate) | Python | Scrapy with TLS impersonation | For Scrapy users |
+
+#### Paid APIs (Good for cloud deployments)
+
+| Service | Free Tier | Price | API Example |
+|---------|-----------|-------|-------------|
+| [Scrape.do](https://scrape.do) | 1,000 credits/mo | $0.08/1K | `https://api.scrape.do/?url=...&token=...` |
+| [ZenRows](https://zenrows.com) | Trial | $49/mo | `https://api.zenrows.com/?url=...&apikey=...` |
+| [ScrapingBee](https://scrapingbee.com) | Trial | $49/mo | `https://app.scrapingbee.com/api/v1/?...` |
+
+#### What to Implement
+
+1. **Node.js integration** — Add `nodriver` or `Camoufox` as a pipe fallback in `src/helpers/pipe.js`
+2. **Scrape.do adapter** — Simple HTTP proxy, 1K free credits/mo, no browser needed
+3. **Playwright stealth mode** — Use `patchright` or `playwright-extra-stealth` for browser-based bypass
+4. **Residential proxy support** — Add proxy rotation for pipe requests
+
+#### How to Contribute
+
+1. Fork the repo
+2. Add your bypass method as a new fallback in `src/helpers/pipe.js`
+3. Add your API key to `.env.example`
+4. Test with: `curl http://localhost:3000/api/episodes/20`
+5. Submit a PR
+
+```bash
+# Example: Add Scrape.do as a fallback
+SCRAPE_DO_TOKEN=your_token_here
+```
+
 ### 🐛 Debug Mode
 
 ```bash
