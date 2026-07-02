@@ -1414,6 +1414,32 @@ docker build -t miruroapi .
 docker run -p 3000:3000 miruroapi
 ```
 
+### ⚡ Cloudflare Worker (Streaming Works!)
+
+> **Streaming endpoints work on Workers** — requests to Miruro bypass Cloudflare bot detection because Workers run on Cloudflare's edge network (edge-to-edge traffic is trusted).
+
+```bash
+# Install wrangler CLI
+npm install -g wrangler
+
+# Login to Cloudflare
+wrangler login
+
+# Deploy
+wrangler deploy worker.js --name miruroapi
+```
+
+Your API is live at: `https://miruroapi.YOUR_SUBDOMAIN.workers.dev`
+
+| Feature | Vercel | Cloudflare Worker |
+|---------|--------|-------------------|
+| Streaming (pipe) | Blocked (403) | Works |
+| Cold starts | ~500ms | Zero |
+| Free tier | Unlimited | 100K req/day |
+| npm deps | Yes | No (native fetch) |
+
+> See `worker.js` for the full Worker implementation with 15 endpoints.
+
 ---
 
 ## 📜 Available Scripts
@@ -1492,7 +1518,27 @@ Cloudflare detects:
 - Missing browser fingerprint headers
 - Non-residential traffic patterns
 
-#### Fix 1: ScraperAPI (Easiest — Free Tier)
+#### Fix 1: Cloudflare Worker (Best — Free, Works!)
+
+Workers run on Cloudflare's edge network. Edge-to-edge requests are trusted — no bot detection.
+
+```bash
+# 1. Install wrangler
+npm install -g wrangler
+
+# 2. Login
+wrangler login
+
+# 3. Deploy
+wrangler deploy worker.js --name miruroapi
+
+# 4. Your streaming now works at:
+# https://miruroapi.YOUR_SUBDOMAIN.workers.dev/api/episodes/20
+```
+
+**Cost:** Free (100K requests/day). No API key needed.
+
+#### Fix 2: ScraperAPI (Paid — $49/month)
 
 ScraperAPI proxies your requests through residential IPs, bypassing Cloudflare.
 
@@ -1505,7 +1551,7 @@ SCRAPER_API_KEY=your_api_key_here
 
 **Cost:** $49/month (premium plan required for protected domains like Miruro).
 
-#### Fix 2: FlareSolverr (Self-Hosted — Unlimited)
+#### Fix 3: FlareSolverr (Self-Hosted — Unlimited)
 
 FlareSolverr runs a headless browser that bypasses Cloudflare automatically.
 
@@ -1524,7 +1570,7 @@ FLARESOLVERR_URL=http://your-server-ip:8191
 - Public IP address
 - Docker installed
 
-#### Fix 3: Self-Host the Entire API
+#### Fix 4: Self-Host the Entire API
 
 If you run the API on your own VPS (not Vercel), requests come from your residential/datacenter IP which may not be blocked.
 

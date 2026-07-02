@@ -5,6 +5,7 @@
 ```
 MiruroAPI/
 ├── server.js                          # Express entry point, port 3000
+├── worker.js                          # Cloudflare Worker edition (edge runtime)
 ├── package.json                       # name: "miruro-api"
 ├── vercel.json                        # Routes /api/* and /* to server.js
 ├── Dockerfile                         # Docker support (node:20-alpine)
@@ -198,3 +199,52 @@ Error responses:
 | axios | ^1.8.0 | HTTP requests |
 | cors | ^2.8.5 | CORS headers |
 | dotenv | ^16.4.0 | Environment variables |
+
+## Cloudflare Worker Architecture (v2.3.1)
+
+The Worker edition (`worker.js`) runs the same API on Cloudflare's edge network. Key difference: **streaming endpoints work** because edge-to-edge requests bypass Cloudflare bot detection.
+
+### Why Workers Work
+
+```
+Vercel (datacenter IP) → miruro.to → Cloudflare WAF → 403 Blocked
+Cloudflare Worker (edge) → miruro.to → Cloudflare internal network → 200 OK
+```
+
+### Worker Runtime Differences
+
+| Feature | Express (Node.js) | Cloudflare Worker |
+|---------|-------------------|-------------------|
+| HTTP client | axios | native fetch |
+| Decompression | zlib (Node.js) | DecompressionStream (Web API) |
+| Caching | in-memory Map | Workers KV (optional) |
+| npm packages | Yes | No (bundle only) |
+| Cold starts | ~500ms | Zero |
+| CPU limit | None | 10ms (free) / 30s (paid) |
+
+### Worker Endpoints (15)
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/health` | System health check |
+| `GET /api/search?query=` | Full-text anime search |
+| `GET /api/suggestions?query=` | Autocomplete suggestions |
+| `GET /api/filter?genre=` | Advanced filter |
+| `GET /api/trending` | Trending anime |
+| `GET /api/popular` | Most popular |
+| `GET /api/top` | Top scored |
+| `GET /api/random` | Random anime |
+| `GET /api/info/:id` | Full anime info |
+| `GET /api/anime/:id/characters` | Characters + voice actors |
+| `GET /api/anime/:id/relations` | Related anime |
+| `GET /api/genres` | All genres |
+| `GET /api/episodes/:id` | Episode list (pipe) |
+| `GET /api/watch/:provider/:anilistId/:category/:slug` | Streaming sources (pipe) |
+
+### Deploy
+
+```bash
+npm install -g wrangler
+wrangler login
+wrangler deploy worker.js --name miruroapi
+```

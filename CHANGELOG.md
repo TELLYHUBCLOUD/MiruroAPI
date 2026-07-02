@@ -1,5 +1,35 @@
 # Changelog
 
+## v2.3.1
+### Cloudflare Worker Edition — Streaming Bypasses Cloudflare
+
+#### New: `worker.js` (Cloudflare Worker)
+- Full API running on Cloudflare's edge network
+- **Streaming endpoints work** — edge-to-edge requests bypass bot detection
+- Zero cold starts, 100K free requests/day
+- No npm dependencies (native `fetch` + `DecompressionStream`)
+- 15 endpoints: search, trending, info, episodes, watch, genres, random
+
+#### Why Workers Work
+```
+Vercel (datacenter) → miruro.to → Cloudflare blocks ❌
+Worker (edge) → miruro.to → Cloudflare trusts itself ✅
+```
+
+#### Deploy
+```bash
+npm install -g wrangler
+wrangler login
+wrangler deploy worker.js --name miruroapi
+```
+
+#### Files Changed
+- `worker.js` — Cloudflare Worker implementation (885 lines)
+- `README.md` — Added Worker deployment section, updated troubleshooting
+- `docs/architecture.md` — Added Worker architecture section
+
+---
+
 ## v2.3.0
 ### Self-Healing Fallback System — Auto-Recovery from Cloudflare Blocks
 
