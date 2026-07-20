@@ -1164,7 +1164,7 @@ const createApiRoutes = (jsonResponse, jsonError, startTime) => {
           total: Object.keys(results).length,
           recommendation:
             working.length === 0
-              ? "All methods blocked. Check Cloudflare status or add SCRAPER_API_KEY / FLARESOLVERR_URL."
+              ? "All methods blocked. Check Cloudflare status or add FLARESOLVERR_URL, SCRAPER_API_KEY, or SCRAPE_DO_TOKEN."
               : working[0]
                 ? `Preferred: ${working[0][0]} (${working[0][1].latency})`
                 : "No methods available",

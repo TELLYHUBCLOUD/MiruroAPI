@@ -60,6 +60,7 @@ const HEADERS = {
 
 const SCRAPER_API_KEY = process.env.SCRAPER_API_KEY || "";
 const FLARESOLVERR_URL = process.env.FLARESOLVERR_URL || "";
+const SCRAPE_DO_TOKEN = process.env.SCRAPE_DO_TOKEN || "";
 
 // ══════════════════════════════════════════════════════════════
 // ENCODING / DECODING UTILITIES
@@ -204,6 +205,31 @@ const methodFlareSolverr = async (encodedReq) => {
 };
 
 // ══════════════════════════════════════════════════════════════
+// METHOD 4: SCRAPE.DO PROXY
+// ══════════════════════════════════════════════════════════════
+
+const methodScrapeDo = async (encodedReq) => {
+  if (!SCRAPE_DO_TOKEN) throw new Error("SCRAPE_DO_TOKEN not configured");
+
+  const targetUrl = `${MIRURO_ORIGINS[0]}${PIPE_PATH}?e=${encodedReq}`;
+  const scrapeDoUrl = `https://api.scrape.do/?token=${SCRAPE_DO_TOKEN}&url=${encodeURIComponent(targetUrl)}`;
+
+  const res = await axios.get(scrapeDoUrl, {
+    headers: {
+      "User-Agent": HEADERS["User-Agent"],
+    },
+    timeout: 60000,
+    maxRedirects: 5,
+  });
+
+  if (res.status !== 200)
+    throw new Error(`Scrape.do request failed: ${res.status}`);
+
+  const obf = res.headers["x-obfuscated"];
+  return { data: decodePipeResponse(res.data, obf), method: "scrapedo" };
+};
+
+// ══════════════════════════════════════════════════════════════
 // SELF-HEALING PIPE REQUEST (tries all methods in order)
 // ══════════════════════════════════════════════════════════════
 
@@ -211,6 +237,7 @@ const METHODS = [
   { name: "direct", fn: methodDirect },
   { name: "scraperapi", fn: methodScraperAPI, requires: () => !!SCRAPER_API_KEY },
   { name: "flaresolverr", fn: methodFlareSolverr, requires: () => !!FLARESOLVERR_URL },
+  { name: "scrapedo", fn: methodScrapeDo, requires: () => !!SCRAPE_DO_TOKEN },
 ];
 
 const pipeRequest = async (path, query) => {
