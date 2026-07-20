@@ -1206,7 +1206,7 @@ const createApiRoutes = (jsonResponse, jsonError, startTime) => {
 
   // ---- FEATURE: OpenAPI specification ----
   router.get("/openapi", (req, res) => {
-    res.json({
+    jsonResponse(res, {
       openapi: "3.0.3",
       info: {
         title: "MiruroAPI",

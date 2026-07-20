@@ -104,7 +104,7 @@ const decodePipeResponse = (encodedStr, obfHeader = null) => {
 // ══════════════════════════════════════════════════════════════
 
 const methodDirect = async (encodedReq) => {
-  const maxRetries = 4;
+  const maxRetries = 2;
   let lastError;
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -113,7 +113,7 @@ const methodDirect = async (encodedReq) => {
     try {
       const res = await axios.get(`${origin}${PIPE_PATH}?e=${encodedReq}`, {
         headers: HEADERS,
-        timeout: 20000,
+        timeout: 5000,
         maxRedirects: 5,
       });
 
@@ -130,15 +130,13 @@ const methodDirect = async (encodedReq) => {
         status &&
         status >= 400 &&
         status < 500 &&
-        status !== 444 &&
-        status !== 403
+        status !== 444
       ) {
         throw new Error(`Pipe request failed with status ${status}`);
       }
 
       if (attempt < maxRetries - 1) {
-        const delay = Math.pow(2, attempt) * 1000;
-        await new Promise((r) => setTimeout(r, delay));
+        await new Promise((r) => setTimeout(r, 500));
       }
     }
   }

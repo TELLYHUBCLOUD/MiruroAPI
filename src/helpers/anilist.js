@@ -182,9 +182,19 @@ const anilistQuery = async (query, variables = {}) => {
   const res = await axios.post(ANILIST_URL, body, {
     headers: { "Content-Type": "application/json" },
     timeout: 15000,
+    validateStatus: (status) => status < 500,
   });
 
-  if (res.status !== 200) throw new Error("AniList query failed");
+  if (res.status === 429) {
+    throw new Error("AniList rate limit exceeded. Try again later.");
+  }
+  if (res.data?.errors && res.data.errors.length > 0) {
+    const msg = res.data.errors[0]?.message || "AniList query failed";
+    throw new Error(msg);
+  }
+  if (res.status !== 200 || !res.data?.data) {
+    throw new Error("AniList query failed");
+  }
   return res.data.data;
 };
 
@@ -409,12 +419,13 @@ const getAnimeRecommendations = async (id, page = 1, perPage = 10) => {
   if (!data.Media) throw new Error("Anime not found");
 
   const recs = data.Media.recommendations;
+  const nodes = (recs?.nodes || []).filter((n) => n && n.mediaRecommendation);
   return {
     page: recs.pageInfo.currentPage,
     perPage: recs.pageInfo.perPage,
     total: recs.pageInfo.total,
     hasNextPage: recs.pageInfo.hasNextPage,
-    recommendations: recs.nodes,
+    recommendations: nodes,
   };
 };
 

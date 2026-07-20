@@ -69,7 +69,7 @@ const tests = [
 
   // ---- FEATURE: Character & staff endpoints ----
   { name: "Character", url: "/character/1" },
-  { name: "Staff", url: "/staff/1" },
+  { name: "Staff", url: "/staff/95088" },
   { name: "Characters Search", url: "/characters?query=kaneki" },
   { name: "Staff Search", url: "/staff?query=oda" },
 
@@ -157,6 +157,7 @@ async function runAll() {
   // NOTE: Sequential execution — parallel requests would hit rate limiter
   for (const test of tests) {
     await runTest(test);
+    await new Promise((r) => setTimeout(r, 700));
   }
 
   console.log(`\n📊 Results: ${passed} passed, ${failed} failed, ${tests.length} total\n`);

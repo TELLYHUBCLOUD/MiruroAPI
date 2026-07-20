@@ -88,23 +88,20 @@ app.use((req, res, next) => {
 // ---- FEATURE: Unified CORS middleware with preflight handling ----
 app.use((req, res, next) => {
   const origin = req.headers.origin;
-  const isProduction = process.env.VERCEL || process.env.NODE_ENV === "production";
 
-  if (allowedOrigins && allowedOrigins.length > 0) {
-    if (allowedOrigins.includes("*")) {
-      res.setHeader("Access-Control-Allow-Origin", "*");
-    } else if (origin && allowedOrigins.includes(origin)) {
+  if (allowedOrigins && allowedOrigins.length > 0 && !allowedOrigins.includes("*")) {
+    if (origin && (allowedOrigins.includes(origin) || origin.includes("localhost") || origin.includes("127.0.0.1"))) {
       res.setHeader("Access-Control-Allow-Origin", origin);
-    } else if (!origin && !isProduction) {
+    } else if (!origin) {
       res.setHeader("Access-Control-Allow-Origin", "*");
-    } else if (origin) {
-      return res.status(403).json({ success: false, message: "Origin not allowed" });
+    } else {
+      res.setHeader("Access-Control-Allow-Origin", origin);
     }
   } else {
     res.setHeader("Access-Control-Allow-Origin", origin || "*");
   }
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-No-Compression");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-No-Compression, Authorization");
   res.setHeader("Access-Control-Max-Age", "86400");
 
   if (req.method === "OPTIONS") {

@@ -346,7 +346,7 @@
         </div>
         <div class="console-body">
           <textarea class="console-input" id="consoleInput" rows="6" spellcheck="false">// Search for anime
-fetch("https://mirurotvapi.vercel.app/api/search?query=naruto")
+fetch("/api/search?query=naruto")
   .then(r => r.json())
   .then(data => {
     console.log(data.results);
@@ -680,7 +680,7 @@ fetch("https://mirurotvapi.vercel.app/api/search?query=naruto")
     });
 
     /* ── Console ── */
-    const BASE = 'https://mirurotvapi.vercel.app/api';
+    const BASE = window.location.origin + '/api';
     const endpoints = {
       search: { url: '/search?query=naruto', label: 'Search' },
       trending: { url: '/trending', label: 'Trending' },
@@ -701,7 +701,9 @@ fetch("https://mirurotvapi.vercel.app/api/search?query=naruto")
       const urlMatch = input.match(/fetch\("([^"]+)"\)/);
       if (!urlMatch) { out.innerHTML = '<span style="color:var(--red)">No fetch URL found</span>'; return; }
       try {
-        const res = await fetch(urlMatch[1]);
+        let reqUrl = urlMatch[1];
+        if (reqUrl.startsWith('/')) reqUrl = window.location.origin + reqUrl;
+        const res = await fetch(reqUrl);
         const data = await res.json();
         out.innerHTML = syntaxHighlight(JSON.stringify(data, null, 2));
         out.scrollTop = out.scrollHeight;
