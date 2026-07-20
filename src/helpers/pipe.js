@@ -209,7 +209,9 @@ const methodScrapeDo = async (encodedReq) => {
   if (!SCRAPE_DO_TOKEN) throw new Error("SCRAPE_DO_TOKEN not configured");
 
   let lastError;
-  for (const origin of MIRURO_ORIGINS) {
+  const originsToTry = [CANONICAL_ORIGIN, ...MIRURO_ORIGINS.filter((o) => o !== CANONICAL_ORIGIN)];
+
+  for (const origin of originsToTry) {
     try {
       const targetUrl = `${origin}${PIPE_PATH}?e=${encodedReq}`;
       const scrapeDoUrl = `https://api.scrape.do/?token=${SCRAPE_DO_TOKEN}&url=${encodeURIComponent(targetUrl)}`;
@@ -218,7 +220,7 @@ const methodScrapeDo = async (encodedReq) => {
         headers: {
           "User-Agent": HEADERS["User-Agent"],
         },
-        timeout: 10000,
+        timeout: 5000,
         maxRedirects: 5,
       });
 
