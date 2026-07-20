@@ -212,7 +212,7 @@ const methodScrapeDo = async (encodedReq) => {
   if (!SCRAPE_DO_TOKEN) throw new Error("SCRAPE_DO_TOKEN not configured");
 
   const targetUrl = `${MIRURO_ORIGINS[0]}${PIPE_PATH}?e=${encodedReq}`;
-  const scrapeDoUrl = `https://api.scrape.do/?token=${SCRAPE_DO_TOKEN}&url=${encodeURIComponent(targetUrl)}`;
+  const scrapeDoUrl = `https://api.scrape.do/?token=${SCRAPE_DO_TOKEN}&super=true&url=${encodeURIComponent(targetUrl)}`;
 
   const res = await axios.get(scrapeDoUrl, {
     headers: {
