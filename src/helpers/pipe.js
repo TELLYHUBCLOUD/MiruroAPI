@@ -31,10 +31,10 @@ const { getCached, setCache } = require("./cache");
 const PIPE_PATH = "/api/secure/pipe";
 
 const MIRURO_ORIGINS = [
-  "https://www.miruro.ru",
   "https://www.miruro.to",
-  "https://www.miruro.bz",
   "https://www.miruro.tv",
+  "https://www.miruro.bz",
+  "https://www.miruro.ru",
 ];
 
 const CANONICAL_ORIGIN = "https://www.miruro.to";
@@ -205,28 +205,33 @@ const methodFlareSolverr = async (encodedReq) => {
 };
 
 // ══════════════════════════════════════════════════════════════
-// METHOD 4: SCRAPE.DO PROXY
-// ══════════════════════════════════════════════════════════════
-
 const methodScrapeDo = async (encodedReq) => {
   if (!SCRAPE_DO_TOKEN) throw new Error("SCRAPE_DO_TOKEN not configured");
 
-  const targetUrl = `${MIRURO_ORIGINS[0]}${PIPE_PATH}?e=${encodedReq}`;
-  const scrapeDoUrl = `https://api.scrape.do/?token=${SCRAPE_DO_TOKEN}&super=true&url=${encodeURIComponent(targetUrl)}`;
+  let lastError;
+  for (const origin of MIRURO_ORIGINS) {
+    try {
+      const targetUrl = `${origin}${PIPE_PATH}?e=${encodedReq}`;
+      const scrapeDoUrl = `https://api.scrape.do/?token=${SCRAPE_DO_TOKEN}&url=${encodeURIComponent(targetUrl)}`;
 
-  const res = await axios.get(scrapeDoUrl, {
-    headers: {
-      "User-Agent": HEADERS["User-Agent"],
-    },
-    timeout: 60000,
-    maxRedirects: 5,
-  });
+      const res = await axios.get(scrapeDoUrl, {
+        headers: {
+          "User-Agent": HEADERS["User-Agent"],
+        },
+        timeout: 10000,
+        maxRedirects: 5,
+      });
 
-  if (res.status !== 200)
-    throw new Error(`Scrape.do request failed: ${res.status}`);
+      if (res.status !== 200)
+        throw new Error(`Scrape.do request failed: ${res.status}`);
 
-  const obf = res.headers["x-obfuscated"];
-  return { data: decodePipeResponse(res.data, obf), method: "scrapedo" };
+      const obf = res.headers["x-obfuscated"];
+      return { data: decodePipeResponse(res.data, obf), method: "scrapedo" };
+    } catch (e) {
+      lastError = e;
+    }
+  }
+  throw lastError || new Error("Scrape.do request failed for all origins");
 };
 
 // ══════════════════════════════════════════════════════════════
