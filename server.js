@@ -155,8 +155,53 @@ app.use(express.static(path.join(__dirname, "public"), {
 }));
 
 // ══════════════════════════════════════════════════════════════
-// CLEAN URL ROUTES
+// DYNAMIC SEO & CLEAN URL ROUTES
 // ══════════════════════════════════════════════════════════════
+
+app.get("/robots.txt", (req, res) => {
+  const protocol = req.headers["x-forwarded-proto"] || req.protocol || "http";
+  const host = req.headers["x-forwarded-host"] || req.get("host") || "localhost:3000";
+  const baseUrl = process.env.API_URL ? process.env.API_URL.replace(/\/api\/?$/, "") : `${protocol}://${host}`;
+
+  res.type("text/plain").send(
+    `User-agent: *\nAllow: /\n\nSitemap: ${baseUrl}/sitemap.xml\n`
+  );
+});
+
+app.get("/sitemap.xml", (req, res) => {
+  const protocol = req.headers["x-forwarded-proto"] || req.protocol || "http";
+  const host = req.headers["x-forwarded-host"] || req.get("host") || "localhost:3000";
+  const baseUrl = process.env.API_URL ? process.env.API_URL.replace(/\/api\/?$/, "") : `${protocol}://${host}`;
+  const today = new Date().toISOString().split("T")[0];
+
+  res.type("application/xml").send(`<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>${baseUrl}/</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>${baseUrl}/api/health</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>${baseUrl}/privacy</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>${baseUrl}/tos</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.3</priority>
+  </url>
+</urlset>`);
+});
 
 const publicDir = path.join(__dirname, "public");
 

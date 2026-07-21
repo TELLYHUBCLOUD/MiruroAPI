@@ -1206,6 +1206,10 @@ const createApiRoutes = (jsonResponse, jsonError, startTime) => {
 
   // ---- FEATURE: OpenAPI specification ----
   router.get("/openapi", (req, res) => {
+    const protocol = req.headers["x-forwarded-proto"] || req.protocol || "http";
+    const host = req.get("host") || "localhost:3000";
+    const serverUrl = process.env.API_URL || `${protocol}://${host}/api`;
+
     jsonResponse(res, {
       openapi: "3.0.3",
       info: {
@@ -1215,7 +1219,7 @@ const createApiRoutes = (jsonResponse, jsonError, startTime) => {
         contact: { name: "Shineii86", url: "https://github.com/Shineii86/MiruroAPI" },
       },
       servers: [
-        { url: "https://mirurotvapi.vercel.app/api", description: "Production" },
+        { url: serverUrl, description: "Active API Server" },
       ],
       paths: {
         "/search": { get: { summary: "Search anime", tags: ["Search"] } },

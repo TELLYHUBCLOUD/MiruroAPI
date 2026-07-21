@@ -23,7 +23,7 @@
  *
  * @type {string}
  */
-const BASE = process.env.API_URL || "https://mirurotvapi.vercel.app/api";
+const BASE = process.env.API_URL || (process.env.PORT ? `http://localhost:${process.env.PORT}/api` : "http://localhost:3000/api");
 
 // ══════════════════════════════════════════════════════════════
 // TEST DEFINITIONS
