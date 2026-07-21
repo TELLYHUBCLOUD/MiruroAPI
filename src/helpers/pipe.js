@@ -218,7 +218,7 @@ const methodScrapeDo = async (encodedReq) => {
         headers: {
           "User-Agent": HEADERS["User-Agent"],
         },
-        timeout: 4000,
+        timeout: 15000,
         maxRedirects: 5,
       });
 
